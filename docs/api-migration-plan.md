@@ -1,279 +1,298 @@
-# FastAPI API Migration Plan for IshanCabs (Version 0.3)
+# FastAPI API Migration Plan for IshanCabs (Version 0.4)
 
 ## Summary
-This migration plan details the conversion of IshanCabs from a client-direct Firebase architecture to a secure, modular FastAPI backend. 
+This migration plan details the conversion of IshanCabs from a client-direct Firebase architecture to a secure, modular FastAPI backend. Version 0.4 incorporates an **interleaved end-to-end delivery strategy**, anti-replay signed quote validation, presigned upload URLs, stateless real-time admin reads, and fine-grained Firestore security rules.
 
-### Core Architectural Decisions for Version 0.3
-1. **Hybrid Real-Time Architecture**:
-   * **Reads**: Clients will continue using the client-side Firebase SDK to establish `onSnapshot` real-time listeners for data display. This preserves real-time synchronization without custom WebSocket/SSE complexity.
-   * **Writes**: 100% of data mutations (booking request, approval, fleet edit, setting updates) are routed through the FastAPI backend.
-   * **Security**: Client access is locked down in Firestore Security Rules to **strictly read-only**.
-2. **OSRM Backend Ownership**:
-   * Distance calculation and routing query tasks are moved entirely to the backend. The client passes only coordinate pairs, preventing malicious fare/distance tampering.
-3. **Signed Quote Flow**:
-   * The backend generates fare quotes and signs them cryptographically using a server secret hash (`quote_signature`). The client must submit this signature when booking; the backend verifies it before writing.
-4. **Atomic Transactions**:
-   * Critical mutations (such as driver/vehicle allocations) use Firestore Transactions in Python to guarantee race-condition safety.
-5. **Firebase Custom Claims for RBAC**:
-   * Custom claims (`{"admin": true}`) verify administrator access on backend routes, replacing local storage and client-side email string checks.
+---
+
+### Core Architectural Decisions for Version 0.4
+
+1. **Stateless Hybrid Real-Time Architecture**:
+   * **Reads**: Clients (both Riders and Admins) continue using the client-side Firebase SDK to establish `onSnapshot` real-time listeners for data display. This preserves instant synchronization without custom WebSocket/SSE backend state complexity.
+   * **Writes**: 100% of data mutations (booking requests, approvals, status transitions, fleet/driver edits, catalog updates) are routed exclusively through the FastAPI backend.
+   * **Security**: Client write access is locked down in Firestore Security Rules to **strictly write-disabled** (`allow write: if false;`).
+
+2. **Interleaved Feature Delivery (End-to-End Migration)**:
+   * Rather than completing all backend APIs before starting frontend work, each phase pair builds the backend routes **and immediately refactors the corresponding frontend components**. This ensures continuous integration and early verification of contract compatibility.
+
+3. **OSRM Backend Ownership**:
+   * Distance calculation, matrix routing, and route polyline generation tasks are moved entirely to the backend (`core/routing.py`). The client passes only origin/destination coordinate pairs, preventing malicious distance or fare tampering.
+
+4. **Anti-Replay Signed Quote Engine**:
+   * The backend generates fare quotes and cryptographically signs them using HMAC-SHA256 with a server secret (`quote_signature`).
+   * **Payload Scope**: The signature covers `base_fare`, `distance_km`, `vehicle_tier`, `pickup_coords`, `drop_coords`, `user_id`, `applied_discount`, `final_fare`, and a `15-minute expiration timestamp`.
+   * **Anti-Replay**: The backend checks for duplicate signature hashes on booking creation to prevent a single quote from being used multiple times.
+
+5. **Direct Media Uploads via Presigned URLs**:
+   * Instead of streaming binary files through FastAPI (consuming Uvicorn RAM and worker threads), the backend generates Firebase Storage presigned upload URLs or tokens. The frontend uploads files directly to Firebase Storage and passes the returned media URL to backend endpoints.
+
+6. **Atomic Firestore Transactions**:
+   * Critical mutations (driver/vehicle allocations, ride status transitions) use Python Firestore Transactions to eliminate race conditions.
+
+7. **Firebase Custom Claims for RBAC & Forced Token Refresh**:
+   * Custom claims (`{"admin": true}`) govern access to admin backend routes. Frontend authentication handlers enforce `user.getIdToken(true)` upon role changes or admin session initialization to prevent stale cached JWT tokens.
 
 ---
 
 ## Phase 0: Discovery and Contract Freeze
-**Goal**: Lock down current frontend-to-data schemas and behavior to optimize token utilization and prevent regression.
+**Goal**: Lock down current frontend-to-data schemas and standardized API envelopes to prevent regression.
 
 ### 🏃 Sprint 0.1: Contract & Schema Freezing
-* **Migration Tasks**:
+* **Backend & System Tasks**:
   1. Document all direct Firestore collections: `users`, `bookings`, `vehicles`, `drivers`, `offers`, `settings/rates`, `locations`, `flat_fares`.
-  2. Map out payload structures, identifying required vs optional attributes (including recently added capacity and address fields).
+  2. Map out payload structures, identifying required vs optional attributes (capacity, coordinates, address strings).
   3. Freeze standard JSON response envelopes for backend APIs:
      * Success: `{ "data": ..., "meta": ... }`
      * Error: `{ "error": { "code": "string", "message": "string", "details": ... } }`
 * **Test & Validation Scenarios**:
-  * Create JSON schema validation mocks representing user profiles, booking invoices, and driver assignments to serve as test fixtures.
+  * Create Pydantic JSON schema validation mocks representing user profiles, booking invoices, and driver assignments to serve as unit test fixtures.
 
 ---
 
-## Phase 1: Backend Foundation and Security
-**Goal**: Build a secure FastAPI scaffolding verified with Firebase custom claims token validation.
+## Phase 1: Backend Scaffolding, Security & Auth
+**Goal**: Establish the FastAPI server foundation and verify Firebase Custom Claims authentication context.
 
 ### 🏃 Sprint 1.1: FastAPI Setup & Health Checks
-* **Migration Tasks**:
-  1. Create Python virtual environment and directory layout under `backend/`.
-  2. Implement `backend/app/main.py` and Uvicorn runtime config.
-  3. Add environment variable loaders (handling CORS configurations and security secrets).
+* **Backend Tasks**:
+  1. Create Python virtual environment and layout under `backend/`.
+  2. Implement `backend/app/main.py` with Uvicorn runtime config.
+  3. Configure environment variable loader (`core/config.py`) handling CORS origins, HMAC quote secrets, and service account credentials.
 * **Test & Validation Scenarios**:
-  * Run `GET /api/v1/health` and verify HTTP 200 with standard health check metadata.
+  * `GET /api/v1/health` returns HTTP 200 with standard health check status metadata.
 
 ### 🏃 Sprint 1.2: Firebase SDK & Auth Authentication Context
-* **Migration Tasks**:
-  1. Initialize the Firebase Admin SDK once globally in `backend/app/core/firebase.py`.
-  2. Code the auth dependency `core/auth.py` to decode Firebase ID tokens, handle validation checks, and yield current user contexts.
+* **Backend Tasks**:
+  1. Initialize Firebase Admin SDK globally in `backend/app/core/firebase.py`.
+  2. Code the auth dependency `core/auth.py` to decode Firebase ID tokens, handle validation errors, and yield user contexts (`AuthenticatedUser`).
 * **Test & Validation Scenarios**:
-  * Query a mock protected route `GET /api/v1/me/test-auth` and verify:
-    * HTTP 401 Unauthorized when no token is provided.
-    * HTTP 401 Unauthorized on invalid/expired tokens.
-    * HTTP 200 OK with correct UID when a valid token is provided.
+  * `GET /api/v1/me/test-auth`:
+    * HTTP 401 when no token is provided.
+    * HTTP 401 on expired/malformed token.
+    * HTTP 200 with `uid` payload on valid token.
 
-### 🏃 Sprint 1.3: Custom claims RBAC Seeder
-* **Migration Tasks**:
-  1. Build an admin dependency checker decoding token claims: `if not claims.get("admin"): raise HTTPException(403)`.
-  2. Create a backend CLI bootstrap script `backend/scripts/make_admin.py` to assign custom claims to specified staff emails.
+### 🏃 Sprint 1.3: Custom Claims RBAC Seeder & Token Refresh Handler
+* **Backend & Frontend Tasks**:
+  1. Build admin dependency checker: `require_admin` verifying `token_claims.get("admin") == True`.
+  2. Create CLI script `backend/scripts/make_admin.py` to set custom claims on specified staff accounts.
+  3. Update frontend `authService.js` to trigger `getIdToken(true)` upon login or role check to force token claim update.
 * **Test & Validation Scenarios**:
-  * Run `make_admin.py` for a test user. Verify that their ID token contains the `{"admin": true}` claim, and verify that accessing an admin-guarded route returns HTTP 200 instead of HTTP 403.
+  * Execute `make_admin.py`. Access admin-guarded route with fresh token, verifying HTTP 200 instead of HTTP 403.
 
 ---
 
-## Phase 2: Profiles, Catalog Reads, and Bootstrap
-**Goal**: Move profiles CRUD and catalog lookups behind validated routes.
+## Phase 2: Profiles & Catalogs (End-to-End)
+**Goal**: Migrate profile CRUD and catalog lookup endpoints, and integrate with the frontend immediately.
 
 ### 🏃 Sprint 2.1: User Profile Manager
-* **Migration Tasks**:
-  1. Implement routers and schemas for profiles under `/api/v1/me/profile`.
-  2. Create repository handlers reading/writing to the Firestore `users` collection.
+* **Backend Tasks**:
+  1. Implement routers `/api/v1/me/profile` (GET, PUT).
+  2. Create repository handlers reading/writing to Firestore `users` collection. Block edits to read-only parameters (`role`, `uid`, `email`).
+* **Frontend Integration Tasks**:
+  1. Refactor frontend `authService.js` / profile components to fetch profile via `GET /api/v1/me/profile` and update profile via `PUT /api/v1/me/profile`.
 * **Test & Validation Scenarios**:
-  * `GET /api/v1/me/profile` returns correct user data from Firestore.
-  * `PUT /api/v1/me/profile` updates fields (e.g. name, phone) and returns the modified profile. Blocks updates to read-only parameters (e.g., `role`, `uid`).
+  * Verify user profile updates succeed through API and update UI without requiring direct Firestore writes.
 
-### 🏃 Sprint 2.2: Settings & Metadata Catalogs
-* **Migration Tasks**:
-  1. Move predefined metadata queries behind endpoints: `GET /api/v1/settings/rates`, `GET /api/v1/locations`, and `GET /api/v1/flat-fares`.
+### 2.2: Settings & Metadata Catalog Reads
+* **Backend Tasks**:
+  1. Move public catalog queries behind API endpoints: `GET /api/v1/settings/rates`, `GET /api/v1/locations`, `GET /api/v1/flat-fares`.
+* **Frontend Integration Tasks**:
+  1. Refactor catalog loaders in frontend to fetch rates and locations from backend endpoints with local caching.
 * **Test & Validation Scenarios**:
-  * Compare JSON structures returned from endpoints against frontend configuration files to ensure 100% naming compliance.
+  * Compare API JSON responses with frontend configuration files for 100% field compliance.
 
 ### 🏃 Sprint 2.3: Promo Offer Validations
-* **Migration Tasks**:
-  1. Move coupon validation logic to backend: `POST /api/v1/offers/validate`.
-  2. Backend fetches coupon code from Firestore, verifies expiration, status active, and checks base fare thresholds before returning calculated discount totals.
+* **Backend Tasks**:
+  1. Implement `POST /api/v1/offers/validate`.
+  2. Backend fetches offer from Firestore, validates expiry, active status, and computes percentage/flat discount.
+* **Frontend Integration Tasks**:
+  1. Update fare breakdown UI to call `/api/v1/offers/validate` when user applies a promo code.
 * **Test & Validation Scenarios**:
-  * Validate discount responses under scenarios: invalid coupon code (404), inactive coupon (400), valid percentage code (returns exact computed discount), valid flat code (returns flat discount value).
+  * Test invalid code (404), expired code (400), and valid code (returns computed discount total).
 
 ---
 
-## Phase 3: Secure Booking Quote and Booking Creation
-**Goal**: Move routing calculations, quote signing, and booking writes to the backend.
+## Phase 3: Secure Routing, Signed Quote & Booking Creation (End-to-End)
+**Goal**: Move route calculation, quote cryptographic signing, and booking creation to backend, then refactor checkout UI.
 
 ### 🏃 Sprint 3.1: Server-Side Routing Utilities
-* **Migration Tasks**:
-  1. Implement backend routing module `backend/app/core/routing.py` containing OSRM query fetcher and Haversine straight-line distance fallback functions.
+* **Backend Tasks**:
+  1. Implement `backend/app/core/routing.py` with OSRM matrix query fetcher and Haversine straight-line distance fallback.
 * **Test & Validation Scenarios**:
-  * Run unit tests on `routing.py` passing coordinate pairs: assert output distance matches expected values and verify fallback coordinates are drawn if OSRM mock fails.
+  * Unit test `routing.py` with coordinate pairs; verify distance calculation accuracy and mock OSRM fallback behavior.
 
-### 🏃 Sprint 3.2: Signed Quote Engine
-* **Migration Tasks**:
+### 🏃 Sprint 3.2: Anti-Replay Signed Quote Engine
+* **Backend Tasks**:
   1. Implement `POST /api/v1/bookings/quote`.
-  2. Backend computes distance (via OSRM) and fare totals across all tiers (using active settings rates and matching flat fares).
-  3. Returns quote parameters alongside a cryptographically signed HMAC token (`quote_signature`) containing: `base_fare`, `distance_km`, `vehicle_tier`, and a `15-minute expiration timestamp`.
+  2. Calculate trip distance via `routing.py` and compute pricing across available vehicle tiers.
+  3. Generate HMAC-SHA256 signature string covering: `base_fare`, `distance_km`, `vehicle_tier`, `pickup_coords`, `drop_coords`, `user_id`, `applied_discount`, `final_fare`, and `expires_at` (15 min).
 * **Test & Validation Scenarios**:
-  * Verify the endpoint returns quote details and a signature string. Assert signature changes if quote details are manually tampered with.
+  * Confirm signature changes if any fare or coordinate payload parameter is tampered with.
 
-### 🏃 Sprint 3.3: Booking Document Writes
-* **Migration Tasks**:
-  1. Implement booking creation `POST /api/v1/bookings`.
-  2. Backend verifies quote signature and timestamp.
-  3. Writes booking document to Firestore, mapping `booking_channel: "website"`.
+### 🏃 Sprint 3.3: Booking Document Writes & Checkout Refactor
+* **Backend Tasks**:
+  1. Implement `POST /api/v1/bookings`.
+  2. Verify quote signature validity, expiration timestamp, and anti-replay nonce (ensuring quote signature has not already been used).
+  3. Write booking document to Firestore (`booking_channel: "website"`).
+* **Frontend Integration Tasks**:
+  1. Refactor `bookingUI.js` checkout flow: request quote from `/bookings/quote`, display signed quote, and pass signed parameters to `POST /bookings`.
 * **Test & Validation Scenarios**:
-  * Test checkout: submitting request with valid quote signature logs booking in Firestore.
-  * Attempt submitting with expired signature (returns HTTP 400).
-  * Attempt submitting with modified fare details (signature validation fails, returns HTTP 400).
+  * E2E checkout test: valid quote creates booking. Tampered quote or replayed signature returns HTTP 400.
 
 ---
 
-## Phase 4: Rider Activity and Feedback
-**Goal**: Securely query history logs and write customer feedback star ratings.
+## Phase 4: Rider Activity History & Feedback (End-to-End)
+**Goal**: Securely query rider history and process completed ride star ratings.
 
 ### 🏃 Sprint 4.1: Activity History Log
-* **Migration Tasks**:
-  1. Implement `GET /api/v1/me/bookings` which queries Firestore for the caller's UIDs.
+* **Backend Tasks**:
+  1. Implement `GET /api/v1/me/bookings` with customer UID filtering and pagination.
+* **Frontend Integration Tasks**:
+  1. Refactor `activityUI.js` to load trip history via API instead of direct Firestore collection queries.
 * **Test & Validation Scenarios**:
-  * Verify it returns sorted, paginated rides for the logged-in customer. Verify a user cannot query another rider's history.
+  * Verify riders can only view their own past bookings sorted chronologically.
 
 ### 🏃 Sprint 4.2: Booking Feedback Submissions
-* **Migration Tasks**:
+* **Backend Tasks**:
   1. Implement `POST /api/v1/me/bookings/{booking_id}/feedback`.
-  2. Verify booking exists, is owned by caller, has status `'completed'`, and does not already have a feedback rating.
+  2. Verify booking ownership, status == `'completed'`, and prevent duplicate review submissions.
+* **Frontend Integration Tasks**:
+  1. Refactor feedback rating modal in `activityUI.js` to submit via API.
 * **Test & Validation Scenarios**:
-  * Assert submitting star rating on incomplete ride returns HTTP 400.
-  * Assert submitting review on someone else's ride returns HTTP 403.
+  * Verify submitting ratings on active/cancelled rides returns HTTP 400; user cannot review another rider's trip (403).
 
 ---
 
-## Phase 5: Admin Booking Dispatch Operations
-**Goal**: Secure booking status transitions and geocoded approvals.
+## Phase 5: Admin Dispatch Operations (End-to-End)
+**Goal**: Execute atomic driver allocations, geocoded approvals, and ride state transitions.
 
-### 🏃 Sprint 5.1: Live Dashboard Websocket Feed
-* **Migration Tasks**:
-  1. Set up WebSocket or Server-Sent Events (SSE) route `/api/v1/ws/admin/bookings`.
-  2. Implement background Firestore snapshot listener on the backend that broadcasts changes to active admin feeds.
+### 🏃 Sprint 5.1: Real-Time Admin Dashboard Feed Setup
+* **Frontend Tasks**:
+  1. Retain Firebase SDK `onSnapshot` listener on `/bookings` in `adminUI.js` for real-time dashboard updates (governed by admin read rules in Phase 8).
 * **Test & Validation Scenarios**:
-  * Verify real-time messages are received by the client when a document is updated in Firestore.
+  * Confirm dashboard table updates automatically when backend commits booking status changes.
 
-### 🏃 Sprint 5.2: Atomic Allocation and Approval
-* **Migration Tasks**:
-  1. Implement `/api/v1/admin/bookings/{booking_id}/approve` supporting optional custom `pickup_coords` and `drop_coords`.
+### 🏃 Sprint 5.2: Atomic Allocation, Approval & Fare Recalculation
+* **Backend Tasks**:
+  1. Implement `POST /api/v1/admin/bookings/{booking_id}/approve`.
   2. Use Firestore Transactions to:
-     * Verify booking status.
-     * Verify driver/car are active and not currently assigned to another ride.
-     * Recalculate OSRM fare if custom coordinates are updated.
-     * Allocate driver and transition status to `"confirmed"`.
+     * Check booking eligibility.
+     * Verify driver & vehicle availability.
+     * Recalculate OSRM route & fare if custom `pickup_coords`/`drop_coords` are overridden by admin.
+     * Assign driver/vehicle and set status to `"confirmed"`.
+* **Frontend Integration Tasks**:
+  1. Refactor `adminUI.js` approval modal to call approval endpoint.
 * **Test & Validation Scenarios**:
-  * Test geocoding override: verify correct route recalculation is committed.
-  * Test allocation race conditions: trigger concurrent approvals for same driver and verify only one succeeds.
+  * Test driver double-allocation race condition in parallel requests (transaction prevents double booking). Verify fare recalculation when coordinates change.
 
 ### 🏃 Sprint 5.3: Ride Lifecycle Transitions
-* **Migration Tasks**:
-  1. Implement endpoints `/reject`, `/start`, and `/complete`.
-  2. Start Ride (`/start`) updates status to `"active"` (only permitted if pickup date/time has passed). Complete Ride (`/complete`) updates status to `"completed"`.
+* **Backend Tasks**:
+  1. Implement `/reject`, `/start`, and `/complete` transition routes under `/api/v1/admin/bookings/{booking_id}/`.
+  2. Enforce state machine rules (e.g. `/start` requires pickup time reached; `/complete` requires active state).
+* **Frontend Integration Tasks**:
+  1. Refactor action buttons in `adminUI.js` to invoke transition endpoints.
 * **Test & Validation Scenarios**:
-  * Verify correct state transitions and validate time lockouts on starting rides early.
+  * Verify valid state transitions and ensure illegal transitions (e.g. completing a pending ride) return HTTP 400.
 
 ---
 
-## Phase 6: Fleet and Driver Registry CRUD
-**Goal**: Secure vehicle and driver registry CRUD and manage document associations.
+## Phase 6: Fleet & Driver Registry Management (End-to-End)
+**Goal**: Secure vehicle/driver registry management and optimize media uploads.
 
 ### 🏃 Sprint 6.1: Fleet Registry Management
-* **Migration Tasks**:
-  1. Implement CRUD routes under `/api/v1/admin/fleet`.
-  2. Enforce bidirectional links: updating a vehicle's driver automatically updates the driver's vehicle link, clearing stale references.
+* **Backend & Frontend Tasks**:
+  1. Implement CRUD under `/api/v1/admin/fleet`.
+  2. Perform bidirectional link updates (linking driver to vehicle automatically updates driver document reference).
+  3. Refactor fleet management tab in `adminUI.js`.
 * **Test & Validation Scenarios**:
-  * Test endpoints, verifying that adding or editing a vehicle syncs associations atomically to Firestore.
+  * Test vehicle creation and driver assignment sync in Firestore.
 
 ### 🏃 Sprint 6.2: Driver Registry Management
-* **Migration Tasks**:
-  1. Implement CRUD routes under `/api/v1/admin/drivers`.
+* **Backend & Frontend Tasks**:
+  1. Implement CRUD under `/api/v1/admin/drivers`.
+  2. Refactor driver registry tab in `adminUI.js`.
 * **Test & Validation Scenarios**:
-  * Verify edits sync back to vehicle driver assignment fields.
+  * Verify driver updates mirror to associated vehicle records.
 
-### 🏃 Sprint 6.3: Upload Service
-* **Migration Tasks**:
-  1. Implement `/api/v1/admin/upload` storing media uploads in Firebase Storage.
+### 🏃 Sprint 6.3: Presigned Media Upload Service
+* **Backend Tasks**:
+  1. Implement `POST /api/v1/admin/upload-url` which generates Firebase Storage presigned upload URLs/tokens.
+* **Frontend Integration Tasks**:
+  1. Update image upload controls in `adminUI.js` to upload directly to Firebase Storage using presigned URL, then attach the resulting asset URL to vehicle/driver payload.
 * **Test & Validation Scenarios**:
-  * Test uploading image files, verifying it returns public asset URLs and validates file MIME types.
+  * Test file uploads: verify files upload directly to storage bucket and asset URLs save properly without server memory overhead.
 
 ---
 
-## Phase 7: Settings, Offers, Locations, and Flat Fare Admin APIs
-**Goal**: Move remaining metadata and catalog updates behind secure routes.
+## Phase 7: Catalog & Settings Admin Control (End-to-End)
+**Goal**: Provide secure admin routes for rates, coupons, locations, and flat fare management.
 
-### 🏃 Sprint 7.1: Catalog Admin Control
-* **Migration Tasks**:
-  1. Implement catalog CRUD routes:
-     * Rates: `PUT /api/v1/admin/settings/rates`
-     * Coupons: `/api/v1/admin/offers` (CRUD)
-     * Locations: `/api/v1/admin/locations` (CRUD)
-     * Flat Fares: `/api/v1/admin/flat-fares` (CRUD)
+### 🏃 Sprint 7.1: Catalog Admin APIs & UI Integration
+* **Backend & Frontend Tasks**:
+  1. Implement Admin REST CRUD routes:
+     * Pricing Rates: `PUT /api/v1/admin/settings/rates`
+     * Offers/Coupons: `/api/v1/admin/offers`
+     * Locations: `/api/v1/admin/locations`
+     * Flat Fares: `/api/v1/admin/flat-fares`
+  2. Refactor settings and rate management panels in `adminUI.js`.
 * **Test & Validation Scenarios**:
-  * Modify pricing parameters. Verify immediate changes on next quote calculation.
-  * Create, toggle active, and delete promo codes, verifying correct logic behaviors.
+  * Update pricing parameters and verify immediate effect on next `/bookings/quote` response.
 
 ---
 
-## Phase 8: Frontend Client Refactor
-**Goal**: Replace all client-side Firestore writes and direct catalog reads with HTTP wrapper calls.
+## Phase 8: Hardening, Security Rules & Auditing
+**Goal**: Completely lock down Firestore client rules against direct writes and sanitize codebase.
 
-### 🏃 Sprint 8.1: API Client setup
+### 🏃 Sprint 8.1: Firestore Rules Lockdown
 * **Migration Tasks**:
-  1. Create frontend API client wrapper `apiClient.js` injecting Firebase JWT token headers.
-  2. Integrate `authService.js` to perform authentication actions via `/bootstrap` and `/profile`.
-* **Test & Validation Scenarios**:
-  * Verify user profiles load correctly on login.
-
-### 🏃 Sprint 8.2: Checkout Quote & Creator Refactor
-* **Migration Tasks**:
-  1. Refactor `bookingUI.js` checkout flow:
-     * Calls `/bookings/quote` with terminal parameters.
-     * Passes signed quote credentials to `POST /bookings`.
-* **Test & Validation Scenarios**:
-  * Place booking, verifying OSRM routing works on the backend, signature is valid, and database document registers.
-
-### 🏃 Sprint 8.3: Activity & Reviews Refactor
-* **Migration Tasks**:
-  1. Refactor `activityUI.js` to fetch personal logs and submit rating star comments via API.
-* **Test & Validation Scenarios**:
-  * Expand card, verify map path displays, and verify submitting comments updates Firestore.
-
-### 🏃 Sprint 8.4: Admin Dashboard Refactor
-* **Migration Tasks**:
-  1. Refactor `adminUI.js` to call REST endpoints for status transitions, fleet registry edits, geocoded acceptances, and settings updates.
-  2. Maintain real-time feeds using WebSockets or Server-Sent Events.
-* **Test & Validation Scenarios**:
-  * Verify that creating bookings, changing settings, and starting rides updates dashboard tables instantly.
-
----
-
-## Phase 9: Hardening, Security Rules, and Cleanup
-**Goal**: Lock down the client security rules and sanitize codebase.
-
-### 🏃 Sprint 9.1: Firestore Rules Lockdown
-* **Migration Tasks**:
-  1. Update Firestore Security Rules:
+  1. Deploy production Firestore Security Rules:
      ```javascript
      rules_version = '2';
      service cloud.firestore {
        match /databases/{database}/documents {
-         // Clients can read catalogs, settings, or their own bookings/profile
+         
+         // Public Catalogs: Anyone can read pricing and location metadata
+         match /settings/rates { allow read: if true; allow write: if false; }
+         match /locations/{locId} { allow read: if true; allow write: if false; }
+         match /flat_fares/{fareId} { allow read: if true; allow write: if false; }
+         match /offers/{offerId} { allow read: if true; allow write: if false; }
+
+         // User Profiles: Users read own profile; Admins can read all profiles
          match /users/{userId} {
-           allow read: if request.auth != null && request.auth.uid == userId;
+           allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.admin == true);
            allow write: if false; // BACKEND ONLY
          }
+
+         // Bookings: Customers read own rides; Admins read all rides
          match /bookings/{bookingId} {
            allow read: if request.auth != null && (resource.data.customer_id == request.auth.uid || request.auth.token.admin == true);
            allow write: if false; // BACKEND ONLY
          }
+
+         // Fleet & Drivers: Admins only
+         match /vehicles/{vehicleId} {
+           allow read: if request.auth != null && request.auth.token.admin == true;
+           allow write: if false; // BACKEND ONLY
+         }
+         match /drivers/{driverId} {
+           allow read: if request.auth != null && request.auth.token.admin == true;
+           allow write: if false; // BACKEND ONLY
+         }
+
+         // Default Lockdown: All direct client writes BLOCKED
          match /{document=**} {
            allow read: if request.auth != null;
-           allow write: if false; // BACKEND ONLY
+           allow write: if false; // ALL MUTATIONS VIA FASTAPI
          }
        }
      }
      ```
 * **Test & Validation Scenarios**:
-  * Attempt write mutations directly from frontend browser console. Verify all write attempts are blocked with permission errors.
+  * Attempt write mutations directly from browser developer console (`db.collection('bookings').add(...)`). Verify all direct write attempts fail with `Permission Denied`.
+  * Confirm unauthenticated users can still load rates/locations catalog for initial quote calculations.
 
-### 🏃 Sprint 9.2: Code Cleanup and Auditing
+### 🏃 Sprint 8.2: Code Cleanup & E2E Verification
 * **Migration Tasks**:
-  1. Remove unused javascript libraries and database utility code.
-  2. Enforce API client headers auditing.
+  1. Audit application for unused client-side database helper functions.
+  2. Verify all API requests correctly append Authorization headers.
 * **Test & Validation Scenarios**:
-  * Confirm application runs cleanly on localhost with zero browser console errors and secure data pathways.
+  * Perform full end-to-end sanity walkthrough (Rider quote -> Booking -> Admin Approval -> Driver Assignment -> Trip Start -> Trip Completion -> Rating).
