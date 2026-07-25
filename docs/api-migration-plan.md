@@ -123,7 +123,7 @@ This migration plan details the conversion of IshanCabs from a client-direct Fir
 ### 🏃 Sprint 3.2: Anti-Replay Signed Quote Engine
 * **Backend Tasks**:
   1. Implement `POST /api/v1/bookings/quote`.
-  2. Calculate trip distance via `routing.py` and compute pricing across available vehicle tiers.
+  2. Calculate trip distance via `routing.py` and compute pricing across available vehicle tiers according to the business rules specified in [docs/fare_logic_design.md](file:///Users/ishanmukherjee/AI_Learning/Cab-Website-Build/cab-website-cloud/cab-website-cloud/docs/fare_logic_design.md).
   3. Generate HMAC-SHA256 signature string covering: `base_fare`, `distance_km`, `vehicle_tier`, `pickup_coords`, `drop_coords`, `user_id`, `applied_discount`, `final_fare`, and `expires_at` (15 min).
 * **Test & Validation Scenarios**:
   * Confirm signature changes if any fare or coordinate payload parameter is tampered with.
@@ -228,12 +228,12 @@ This migration plan details the conversion of IshanCabs from a client-direct Fir
 
 ### 🏃 Sprint 7.1: Catalog Admin APIs & UI Integration
 * **Backend & Frontend Tasks**:
-  1. Implement Admin REST CRUD routes:
+  1. Implement Admin REST CRUD routes to manage catalogs and pricing models (Local, Rental, and Intercity) configured under the dynamic schema format in [docs/fare_logic_design.md](file:///Users/ishanmukherjee/AI_Learning/Cab-Website-Build/cab-website-cloud/cab-website-cloud/docs/fare_logic_design.md):
      * Pricing Rates: `PUT /api/v1/admin/settings/rates`
      * Offers/Coupons: `/api/v1/admin/offers`
      * Locations: `/api/v1/admin/locations`
      * Flat Fares: `/api/v1/admin/flat-fares`
-  2. Refactor settings and rate management panels in `adminUI.js`.
+  2. Refactor settings and rate management panels in `adminUI.js` to expose these customizable parameters.
 * **Test & Validation Scenarios**:
   * Update pricing parameters and verify immediate effect on next `/bookings/quote` response.
 
