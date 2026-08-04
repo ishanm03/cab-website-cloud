@@ -15,18 +15,18 @@ def make_admin(email: str):
         print("Error: Email address cannot be empty.")
         sys.exit(1)
         
-    print(f"IshanCabs CLI: Searching for user with email: '{email_clean}'...")
+    print(f"SethCabs CLI: Searching for user with email: '{email_clean}'...")
     try:
         user = firebase_auth.get_user_by_email(email_clean)
         uid = user.uid
-        print(f"IshanCabs CLI: Found user: '{user.display_name or 'No Display Name'}' (UID: {uid})")
+        print(f"SethCabs CLI: Found user: '{user.display_name or 'No Display Name'}' (UID: {uid})")
         
         # Merge existing custom claims or set new admin claim
         existing_claims = user.custom_claims or {}
         new_claims = {**existing_claims, "admin": True}
         
         firebase_auth.set_custom_user_claims(uid, new_claims)
-        print(f"IshanCabs CLI: Successfully set custom claims {new_claims} on user UID: {uid}")
+        print(f"SethCabs CLI: Successfully set custom claims {new_claims} on user UID: {uid}")
         print("Note: The user will need to refresh their authentication ID token for changes to apply.")
     except firebase_auth.UserNotFoundError:
         print(f"Error: No user found with email: '{email_clean}'. Please verify the email in your Firebase Console.")

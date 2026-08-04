@@ -7,7 +7,7 @@ from pydantic import Field
 class Settings(BaseSettings):
     # API Configurations
     API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "IshanCabs Backend"
+    PROJECT_NAME: str = "SethCabs Backend"
     
     # CORS Origins (comma separated list in env, e.g. "http://localhost:5500,http://127.0.0.1:5500")
     CORS_ORIGINS: List[str] = ["*"]
