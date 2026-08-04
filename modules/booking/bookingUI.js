@@ -15,6 +15,10 @@ import {
     orderBy 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+const API_BASE = window.location.origin.includes("localhost") || window.location.origin.includes("127.0.0.1") 
+    ? "http://localhost:8000/api/v1" 
+    : "/api/v1";
+
 // DOM Selector Handles
 const riderWelcome = document.getElementById("rider-welcome");
 const btnRiderLogout = document.getElementById("btn-rider-logout");
@@ -206,10 +210,12 @@ async function handleLogout() {
 // Loads predefined locations from Firestore
 async function loadDynamicLocations() {
     try {
-        if (!db) throw new Error("Firestore not initialized.");
-        const snap = await getDocs(query(collection(db, "locations"), orderBy("name")));
-        dbLocations = snap.docs.map(doc => doc.data());
-        console.log(`Loaded ${dbLocations.length} predefined locations from Firestore.`);
+        const response = await fetch(`${API_BASE}/locations`);
+        if (!response.ok) {
+            throw new Error(`HTTP error ${response.status}`);
+        }
+        dbLocations = await response.json();
+        console.log(`Loaded ${dbLocations.length} predefined locations from API.`);
         hydratePickupLocations();
     } catch (error) {
         console.error("Failed to load locations, using fallback coordinates:", error);
@@ -657,21 +663,21 @@ async function handleStep1Submit(e) {
     let metrics = null;
     if (category !== "rental" && !isCustomBooking) {
         try {
-            const flatFareQuery = query(
-                collection(db, "flat_fares"),
-                where("pickup_name", "==", pickup),
-                where("drop_name", "==", drop)
-            );
-            const flatFareSnap = await getDocs(flatFareQuery);
-            if (!flatFareSnap.empty) {
-                const flatFareData = flatFareSnap.docs[0].data();
-                metrics = {
-                    km: flatFareData.km || distanceKm,
-                    base_fare_compact: flatFareData.fares.compact,
-                    base_fare_premium: flatFareData.fares.premium,
-                    base_fare_suv: flatFareData.fares.suv,
-                    base_fare_muv: flatFareData.fares.muv
-                };
+            const response = await fetch(`${API_BASE}/flat-fares`);
+            if (response.ok) {
+                const flatFares = await response.json();
+                const matched = flatFares.find(
+                    f => f.pickup_name === pickup && f.drop_name === drop
+                );
+                if (matched) {
+                    metrics = {
+                        km: matched.km || distanceKm,
+                        base_fare_compact: matched.fares.compact,
+                        base_fare_premium: matched.fares.premium,
+                        base_fare_suv: matched.fares.suv,
+                        base_fare_muv: matched.fares.muv
+                    };
+                }
             }
         } catch (err) {
             console.warn("Flat fares query failed, falling back to static/dynamic calculation:", err);

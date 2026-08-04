@@ -10,6 +10,7 @@ import app.core.firebase
 
 from app.core.config import settings
 from app.core.auth import get_current_user, require_admin, AuthenticatedUser
+from app.routers import profiles, catalogs
 
 # Initialize FastAPI application
 app = FastAPI(
@@ -25,6 +26,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register routers
+app.include_router(profiles.router, prefix=settings.API_V1_STR)
+app.include_router(catalogs.router, prefix=settings.API_V1_STR)
 
 # ==========================================
 # Exception Handlers

@@ -1,63 +1,68 @@
 // modules/shared/dbService.js
 
-import { db } from "./firebase.js";
-import { 
-    doc, 
-    setDoc, 
-    getDoc, 
-    serverTimestamp 
-} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { auth } from "./firebase.js";
+
+const API_BASE = window.location.origin.includes("localhost") || window.location.origin.includes("127.0.0.1") 
+    ? "http://localhost:8000/api/v1" 
+    : "/api/v1";
 
 /**
- * Service to manage all Firestore database interactions for IshanCabs
+ * Service to manage all Firestore database interactions for SethCabs
  */
 const dbService = {
+    /**
+     * Helper to prepare HTTP headers with JWT token
+     */
+    async getHeaders() {
+        const headers = {
+            "Content-Type": "application/json"
+        };
+        if (auth && auth.currentUser) {
+            try {
+                const token = await auth.currentUser.getIdToken();
+                headers["Authorization"] = `Bearer ${token}`;
+            } catch (err) {
+                console.error("dbService: Failed to fetch ID token:", err);
+            }
+        }
+        return headers;
+    },
+
     /**
      * Creates or updates a customer profile with audit records
      * @param {string} uid - Unique Firebase Authentication user ID
      * @param {object} profileData - Customer details (name, city, phone, email, auth_provider)
      */
     async saveUserProfile(uid, profileData) {
-        if (!db) throw new Error("Firestore is not initialized. Check firebase.js configurations.");
+        if (uid === "admin_poc_uid") {
+            console.log("dbService: Admin PoC user profile bypassed API call.");
+            return { uid, ...profileData, status: "active" };
+        }
         
         try {
-            const userDocRef = doc(db, "users", uid);
-            const userSnapshot = await getDoc(userDocRef);
+            const headers = await this.getHeaders();
+            const response = await fetch(`${API_BASE}/me/profile`, {
+                method: "PUT",
+                headers: headers,
+                body: JSON.stringify({
+                    name: profileData.name || undefined,
+                    city: profileData.city || undefined,
+                    phone: profileData.phone || undefined,
+                    email: profileData.email || undefined,
+                    auth_provider: profileData.auth_provider || undefined
+                })
+            });
             
-            if (!userSnapshot.exists()) {
-                // New user - Write complete structure & audit columns
-                const payload = {
-                    uid: uid,
-                    name: profileData.name || "",
-                    city: profileData.city || "",
-                    phone: profileData.phone || "",
-                    email: profileData.email || null,
-                    auth_provider: profileData.auth_provider || "unknown",
-                    status: "active",
-                    creation_ts: serverTimestamp(),
-                    updated_ts: serverTimestamp()
-                };
-                await setDoc(userDocRef, payload);
-                console.log("IshanCabs: Successfully created new user profile in Firestore:", uid);
-                return payload;
-            } else {
-                // Existing user - Merge changes and refresh update timestamp
-                const updatePayload = {
-                    updated_ts: serverTimestamp()
-                };
-                // Do not overwrite existing set fields with null/empty values
-                if (profileData.name) updatePayload.name = profileData.name;
-                if (profileData.city) updatePayload.city = profileData.city;
-                if (profileData.phone) updatePayload.phone = profileData.phone;
-                if (profileData.email) updatePayload.email = profileData.email;
-                if (profileData.auth_provider) updatePayload.auth_provider = profileData.auth_provider;
-
-                await setDoc(userDocRef, updatePayload, { merge: true });
-                console.log("IshanCabs: Successfully updated existing user profile in Firestore:", uid);
-                return { ...userSnapshot.data(), ...updatePayload };
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || errData.error?.message || `HTTP ${response.status} updating profile.`);
             }
+            
+            const result = await response.json();
+            console.log("dbService: Successfully updated user profile via API:", uid);
+            return result; // Backend returns the full serialized profile
         } catch (error) {
-            console.error("IshanCabs: Error saving user profile to Firestore:", error);
+            console.error("dbService: Error saving user profile via API:", error);
             throw error;
         }
     },
@@ -68,13 +73,36 @@ const dbService = {
      * @returns {Promise<object|null>} Profile data or null
      */
     async getUserProfile(uid) {
-        if (!db) throw new Error("Firestore is not initialized.");
+        if (uid === "admin_poc_uid") {
+            return {
+                uid: "admin_poc_uid",
+                email: "admin@ishancabs.com",
+                name: "Admin Manager",
+                phone: "+919999999999",
+                status: "active",
+                auth_provider: "password"
+            };
+        }
         try {
-            const userDocRef = doc(db, "users", uid);
-            const userSnapshot = await getDoc(userDocRef);
-            return userSnapshot.exists() ? userSnapshot.data() : null;
+            const headers = await this.getHeaders();
+            const response = await fetch(`${API_BASE}/me/profile`, {
+                method: "GET",
+                headers: headers
+            });
+            
+            if (response.status === 404) {
+                return null;
+            }
+            
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || errData.error?.message || `HTTP ${response.status} fetching profile.`);
+            }
+            
+            const result = await response.json();
+            return result;
         } catch (error) {
-            console.error("IshanCabs: Error fetching user profile:", error);
+            console.error("dbService: Error fetching user profile via API:", error);
             throw error;
         }
     }

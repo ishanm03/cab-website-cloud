@@ -13,6 +13,10 @@ import {
     serverTimestamp 
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+const API_BASE = window.location.origin.includes("localhost") || window.location.origin.includes("127.0.0.1") 
+    ? "http://localhost:8000/api/v1" 
+    : "/api/v1";
+
 // Static Default Fleet Size Configurations (Fallback if Firestore database is empty)
 const DEFAULT_FLEET_SIZES = {
     compact: 5,
@@ -203,22 +207,15 @@ Please confirm driver and vehicle allocation details. Thank you!`;
      * @returns {Promise<object>} Map of rates per vehicle tier
      */
     async fetchRates() {
-        if (!db) {
-            console.warn("IshanCabs: Firestore not initialized. Using default rates.");
-            return { rates: RATE_CONFIG, version_id: null };
-        }
         try {
-            const docRef = doc(db, "settings", "rates");
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                if (data && data.rates) {
-                    return { rates: data.rates, version_id: data.active_version_id || null };
-                }
+            const response = await fetch(`${API_BASE}/settings/rates`);
+            if (!response.ok) {
+                throw new Error(`HTTP error ${response.status}`);
             }
-            return { rates: RATE_CONFIG, version_id: null };
+            const data = await response.json();
+            return { rates: data.rates, version_id: data.active_version_id || null };
         } catch (error) {
-            console.error("IshanCabs: Error fetching rates settings:", error);
+            console.error("SethCabs: Error fetching rates via API, falling back to static config:", error);
             return { rates: RATE_CONFIG, version_id: null };
         }
     },
@@ -229,9 +226,19 @@ Please confirm driver and vehicle allocation details. Thank you!`;
      * @returns {Promise<void>}
      */
     async updateRates(newRates) {
-        if (!db) throw new Error("Firestore not initialized.");
-        const docRef = doc(db, "settings", "rates");
-        await setDoc(docRef, { rates: newRates });
+        try {
+            const response = await fetch(`${API_BASE}/settings/rates`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ rates: newRates })
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP error ${response.status}`);
+            }
+        } catch (error) {
+            console.error("SethCabs: Error updating rates via API:", error);
+            throw error;
+        }
     },
 
     /**
@@ -239,21 +246,14 @@ Please confirm driver and vehicle allocation details. Thank you!`;
      * @returns {Promise<Array>} List of visible promo offers
      */
     async fetchVisiblePromos() {
-        if (!db) return [];
         try {
-            const offersQuery = query(
-                collection(db, "offers"),
-                where("status", "==", "active"),
-                where("visible_to_customer", "==", true)
-             );
-             const snap = await getDocs(offersQuery);
-             const list = [];
-             snap.forEach(docSnap => {
-                 list.push(docSnap.data());
-             });
-             return list;
+            const response = await fetch(`${API_BASE}/offers/visible`);
+            if (!response.ok) {
+                throw new Error(`HTTP error ${response.status}`);
+            }
+            return await response.json();
         } catch (error) {
-            console.error("IshanCabs: Error fetching visible promos:", error);
+            console.error("SethCabs: Error fetching visible promos via API:", error);
             return [];
         }
     },
@@ -265,54 +265,29 @@ Please confirm driver and vehicle allocation details. Thank you!`;
      * @returns {Promise<object>} Validation result: { valid: boolean, discount: number, message: string }
      */
     async verifyPromoCode(code, baseFare) {
-        if (!db) {
-            return { valid: false, discount: 0, message: "Database not connected." };
-        }
         try {
             const cleanCode = code.trim().toUpperCase();
             if (!cleanCode) {
                 return { valid: false, discount: 0, message: "Please enter a promo code." };
             }
-            const docRef = doc(db, "offers", cleanCode);
-            const docSnap = await getDoc(docRef);
             
-            if (!docSnap.exists()) {
-                return { valid: false, discount: 0, message: "Invalid promo code." };
+            const response = await fetch(`${API_BASE}/offers/validate`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    code: cleanCode,
+                    base_fare: baseFare
+                })
+            });
+            
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                return { valid: false, discount: 0, message: errData.detail || "Error validating coupon." };
             }
             
-            const offer = docSnap.data();
-            if (offer.status !== "active") {
-                return { valid: false, discount: 0, message: "This promo code is no longer active." };
-            }
-            
-            const minThreshold = parseFloat(offer.min_fare_threshold) || 0;
-            if (baseFare < minThreshold) {
-                return { 
-                    valid: false, 
-                    discount: 0, 
-                    message: `Minimum fare of ₹${minThreshold.toLocaleString("en-IN")} required to use this promo.` 
-                };
-            }
-            
-            let discount = 0;
-            const val = parseFloat(offer.discount_value) || 0;
-            if (offer.discount_type === "flat") {
-                discount = val;
-            } else if (offer.discount_type === "percentage") {
-                discount = Math.round((baseFare * val) / 100);
-            }
-            
-            // Limit discount to not exceed baseFare
-            discount = Math.min(discount, baseFare);
-            
-            return {
-                valid: true,
-                discount: discount,
-                code: cleanCode,
-                message: `Promo code ${cleanCode} applied successfully!`
-            };
+            return await response.json();
         } catch (error) {
-            console.error("IshanCabs: Error verifying promo code:", error);
+            console.error("SethCabs: Error verifying promo code via API:", error);
             return { valid: false, discount: 0, message: "Error verifying promo code. Please try again." };
         }
     }
