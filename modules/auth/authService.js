@@ -134,6 +134,21 @@ const authService = {
     },
 
     /**
+     * Retrieves the current user's JWT ID token, optionally forcing a refresh.
+     * Useful for synchronizing custom claims (like admin status).
+     * @param {boolean} forceRefresh - Force fetch a new token from Firebase server
+     */
+    async getJWTToken(forceRefresh = false) {
+        if (!auth || !auth.currentUser) return null;
+        try {
+            return await auth.currentUser.getIdToken(forceRefresh);
+        } catch (error) {
+            console.error("IshanCabs: Failed to fetch user ID token:", error);
+            return null;
+        }
+    },
+
+    /**
      * Logs the customer out of the application
      */
     async logout() {
