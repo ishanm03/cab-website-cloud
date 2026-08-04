@@ -962,6 +962,7 @@ async function handleApplyPromo() {
 }
 
 // Final execution loop (saves to Firestore, then opens WhatsApp redirect window)
+// Final execution loop (saves to Firestore, then opens WhatsApp redirect window)
 async function handleFinalConfirm() {
     if (!currentUser || !currentProfile) {
         utils.showAlert(bookingAlert, "Your session has expired. Please reload and log in again.");
@@ -970,38 +971,50 @@ async function handleFinalConfirm() {
 
     showLoader("Registering booking & compiling invoice details...");
 
-    const bookingPayload = {
-        customer_id: currentUser.uid,
-        booking_channel: "website",
-        customer_details: {
-            name: currentProfile.name || "Rider",
-            phone: currentProfile.phone || ""
-        },
-        trip_details: {
-            ride_type: currentRouteData.category,
-            pickup_location: currentRouteData.pickup,
-            drop_location: currentRouteData.drop,
-            pickup_date: currentRouteData.dateString,
-            pickup_time: currentRouteData.timeString,
-            outstation_days: currentRouteData.category === "outstation" ? currentRouteData.days : null,
-            rental_hours: currentRouteData.category === "rental" ? currentRouteData.hours : null,
-            pickup_coords: currentRouteData.pickupCoords || null,
-            drop_coords: currentRouteData.dropCoords || null,
-            route_polyline: currentRouteData.polyline ? JSON.stringify(currentRouteData.polyline) : null
-        },
-        fare_details: {
-            vehicle_tier: selectedVehicleTier,
-            estimated_km: currentRouteData.km,
-            base_fare: selectedVehicleFare,
-            discount_amount: appliedPromo ? appliedPromo.discount : 0,
-            promo_code: appliedPromo ? appliedPromo.code : null,
-            estimated_fare: appliedPromo ? (selectedVehicleFare - appliedPromo.discount) : selectedVehicleFare,
-            rates_version_id: activeRatesVersionId
-        }
-    };
-
     try {
-        // 1. Commit record to Cloud Firestore DB
+        // 1. Fetch secure signed quote from FastAPI backend
+        const quote = await bookingService.estimateQuote({
+            category: currentRouteData.category,
+            pickup: currentRouteData.pickup,
+            drop: currentRouteData.drop,
+            date_string: currentRouteData.dateString,
+            time_string: currentRouteData.timeString,
+            days: currentRouteData.category === "outstation" ? currentRouteData.days : null,
+            hours: currentRouteData.category === "rental" ? currentRouteData.hours : null,
+            km: currentRouteData.km,
+            vehicle_tier: selectedVehicleTier,
+            promo_code: appliedPromo ? appliedPromo.code : null
+        });
+
+        // 2. Assemble secure booking create payload
+        const bookingPayload = {
+            trip_details: {
+                ride_type: currentRouteData.category,
+                pickup_location: currentRouteData.pickup,
+                drop_location: currentRouteData.drop,
+                pickup_date: currentRouteData.dateString,
+                pickup_time: currentRouteData.timeString,
+                outstation_days: currentRouteData.category === "outstation" ? currentRouteData.days : null,
+                rental_hours: currentRouteData.category === "rental" ? currentRouteData.hours : null,
+                pickup_coords: currentRouteData.pickupCoords || null,
+                drop_coords: currentRouteData.dropCoords || null,
+                route_polyline: currentRouteData.polyline ? JSON.stringify(currentRouteData.polyline) : null
+            },
+            fare_details: {
+                vehicle_tier: selectedVehicleTier,
+                estimated_km: currentRouteData.km,
+                base_fare: quote.base_fare,
+                discount_amount: quote.discount_amount,
+                promo_code: quote.promo_code,
+                estimated_fare: quote.estimated_fare,
+                rates_version_id: activeRatesVersionId
+            },
+            quote_signature: quote.signature,
+            quote_id: quote.quote_id,
+            expires_at: quote.expires_at
+        };
+
+        // 3. Commit record to Cloud Firestore DB via Backend
         const bookingId = await bookingService.createBooking(bookingPayload);
         bookingPayload.booking_id = bookingId;
 

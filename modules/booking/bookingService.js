@@ -97,83 +97,86 @@ const bookingService = {
      * @param {string} dateString - "YYYY-MM-DD"
      * @returns {Promise<boolean>} Available status
      */
+    /**
+     * Cache for date availability checks
+     */
+    availabilityCache: { date: null, data: null },
+
     async checkAvailability(tier, dateString) {
-        if (!db) {
-            console.warn("IshanCabs: Firestore not initialized. Defaulting to full availability.");
-            return true;
+        if (this.availabilityCache.date === dateString && this.availabilityCache.data) {
+            return this.availabilityCache.data[tier] !== false;
         }
-
         try {
-            // 1. Determine active fleet size for this tier
-            let fleetSize = DEFAULT_FLEET_SIZES[tier] || 2;
-            
-            try {
-                // Check if a vehicles collection lists fleet size dynamically
-                const fleetQuery = query(
-                    collection(db, "vehicles"),
-                    where("tier", "==", tier),
-                    where("status", "==", "active")
-                );
-                const fleetSnap = await getDocs(fleetQuery);
-                if (!fleetSnap.empty) {
-                    fleetSize = fleetSnap.size;
-                }
-            } catch (err) {
-                console.log("IshanCabs: Falling back to default static fleet size allocations:", err.message);
+            const response = await fetch(`${API_BASE}/bookings/availability?date=${dateString}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error ${response.status}`);
             }
-
-            // 2. Fetch all conflicting active bookings for this date and tier
-            // We search for bookings where status is not cancelled and dates overlap
-            const bookingsQuery = query(
-                collection(db, "bookings"),
-                where("trip_details.pickup_date", "==", dateString),
-                where("fare_details.vehicle_tier", "==", tier),
-                where("status", "in", ["pending_approval", "confirmed", "active"])
-            );
-            
-            const bookingsSnap = await getDocs(bookingsQuery);
-            const activeBookingsCount = bookingsSnap.size;
-
-            console.log(`IshanCabs Inventory Check [${tier} on ${dateString}]: Active Bookings = ${activeBookingsCount}, Fleet Size = ${fleetSize}`);
-
-            // 3. If bookings match or exceed total active fleet, mark as Sold Out!
-            return activeBookingsCount < fleetSize;
+            const result = await response.json();
+            this.availabilityCache = { date: dateString, data: result.availability };
+            return this.availabilityCache.data[tier] !== false;
         } catch (error) {
-            console.error("IshanCabs: Error running overbooking check:", error);
-            return true; // Fallback to safe true to allow bookings in offline/degraded states
+            console.error("bookingService: Error querying availability, defaulting to true:", error);
+            return true;
         }
     },
 
     /**
-      * Commits a customer's booking request directly to the Cloud Firestore database
+     * Requests a cryptographically signed quote from the backend
+     */
+    async estimateQuote(payload) {
+        try {
+            const token = auth && auth.currentUser ? await auth.currentUser.getIdToken() : null;
+            const headers = { "Content-Type": "application/json" };
+            if (token) {
+                headers["Authorization"] = `Bearer ${token}`;
+            }
+            
+            const response = await fetch(`${API_BASE}/quotes/estimate`, {
+                method: "POST",
+                headers: headers,
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || "Error generating quote.");
+            }
+            return await response.json();
+        } catch (error) {
+            console.error("bookingService: estimateQuote failed:", error);
+            throw error;
+        }
+    },
+
+    /**
+      * Commits a customer's booking request directly to the Cloud Firestore database via API
       * @param {object} bookingPayload - Comprehensive booking data matching trip schemas
       * @returns {Promise<string>} Generated Booking ID
       */
     async createBooking(bookingPayload) {
-        if (!db) throw new Error("Firestore not initialized.");
-
         try {
-            // Generate a clean date-based readable Booking ID (e.g. BK-20260528-9F8A)
-            const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-            const randomHex = Math.floor(1000 + Math.random() * 9000).toString();
-            const bookingId = `BK-${dateStamp}-${randomHex}`;
+            const token = auth && auth.currentUser ? await auth.currentUser.getIdToken() : null;
+            const headers = { "Content-Type": "application/json" };
+            if (token) {
+                headers["Authorization"] = `Bearer ${token}`;
+            }
 
-            const completePayload = {
-                ...bookingPayload,
-                booking_id: bookingId,
-                status: "pending_approval",
-                payment_status: "pending",
-                driver_assignment: null,
-                creation_ts: serverTimestamp(),
-                updated_ts: serverTimestamp()
-            };
+            const response = await fetch(`${API_BASE}/bookings`, {
+                method: "POST",
+                headers: headers,
+                body: JSON.stringify(bookingPayload)
+            });
 
-            // Write explicitly to /bookings/{booking_id}
-            await setDoc(doc(db, "bookings", bookingId), completePayload);
-            console.log("IshanCabs: Booking logged in Firestore successfully:", bookingId);
-            return bookingId;
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || "Error committing booking.");
+            }
+
+            const result = await response.json();
+            console.log("bookingService: Booking committed successfully via API:", result.booking_id);
+            return result.booking_id;
         } catch (error) {
-            console.error("IshanCabs: Error committing booking to database:", error);
+            console.error("bookingService: createBooking failed:", error);
             throw error;
         }
     },

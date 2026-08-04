@@ -109,3 +109,39 @@ class SettingsRatesResponse(BaseModel):
 
     class Config:
         populate_by_name = True
+
+# ==========================================
+# 5. Availability & Booking Schemas
+# ==========================================
+
+class AvailabilityResponse(BaseModel):
+    availability: Dict[str, bool]
+
+class QuoteEstimateRequest(BaseModel):
+    category: str
+    pickup: str
+    drop: str
+    date_string: str
+    time_string: str
+    days: Optional[int] = None
+    hours: Optional[int] = None
+    km: float
+    vehicle_tier: str
+    promo_code: Optional[str] = None
+
+class QuoteEstimateResponse(BaseModel):
+    quote_id: str
+    base_fare: float
+    discount_amount: float
+    estimated_fare: float
+    promo_code: Optional[str] = None
+    signature: str
+    expires_at: str
+
+class BookingCreateRequest(BaseModel):
+    trip_details: Dict[str, Any]
+    fare_details: Dict[str, Any]
+    quote_signature: str
+    quote_id: str
+    expires_at: str
+
