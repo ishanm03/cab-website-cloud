@@ -30,12 +30,44 @@ DEFAULT_FLEET_SIZES = {
     "muv": 2
 }
 
-RATE_CONFIG = {
-    "compact": { "rate_per_km": 10.00, "driver_allowance_per_day": 300.00, "rate_per_hour": 120.00, "base_cost": 250.00 },
-    "premium": { "rate_per_km": 12.00, "driver_allowance_per_day": 300.00, "rate_per_hour": 150.00, "base_cost": 300.00 },
-    "suv":     { "rate_per_km": 15.00, "driver_allowance_per_day": 400.00, "rate_per_hour": 200.00, "base_cost": 500.00 },
-    "muv":     { "rate_per_km": 18.00, "driver_allowance_per_day": 500.00, "rate_per_hour": 250.00, "base_cost": 700.00 }
+# Fallback rate parameters matching docs/fare_logic_design.md
+FALLBACK_RATES = {
+    "local": {
+        "compact": { "base_fare": 550.0, "extra_km_rate": 12.0, "waiting_rate": 3.0, "night_charge": 200.0 },
+        "premium": { "base_fare": 650.0, "extra_km_rate": 13.0, "waiting_rate": 4.0, "night_charge": 300.0 },
+        "suv":     { "base_fare": 750.0, "extra_km_rate": 14.0, "waiting_rate": 5.0, "night_charge": 400.0 },
+        "muv":     { "base_fare": 850.0, "extra_km_rate": 15.0, "waiting_rate": 5.0, "night_charge": 500.0 }
+    },
+    "rental": {
+        "compact": { "base_fare": 2300.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 12.0, "extra_hour_rate": 180.0, "night_charge": 200.0, "default_discount": 500.0 },
+        "premium": { "base_fare": 2500.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 13.0, "extra_hour_rate": 240.0, "night_charge": 300.0, "default_discount": 500.0 },
+        "suv":     { "base_fare": 2800.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 14.0, "extra_hour_rate": 300.0, "night_charge": 400.0, "default_discount": 500.0 },
+        "muv":     { "base_fare": 3300.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 16.0, "extra_hour_rate": 360.0, "night_charge": 500.0, "default_discount": 500.0 }
+    },
+    "intercity": {
+        "compact": { "rate_per_km": 12.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
+        "premium": { "rate_per_km": 14.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
+        "suv":     { "rate_per_km": 18.0, "driver_allowance": 800.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
+        "muv":     { "rate_per_km": 22.0, "driver_allowance": 800.0, "min_km_per_day": 250.0, "night_halt": 500.0 }
+    },
+    "global": {
+        "night_charge_start": "23:59",
+        "night_charge_end": "06:00"
+    }
 }
+
+def is_night_time(time_str: str, start_str: str = "23:59", end_str: str = "06:00") -> bool:
+    try:
+        t = datetime.strptime(time_str, "%H:%M").time()
+        start = datetime.strptime(start_str, "%H:%M").time()
+        end = datetime.strptime(end_str, "%H:%M").time()
+        
+        if start > end:  # Over midnight (e.g. 23:59 to 06:00)
+            return t >= start or t <= end
+        else:
+            return start <= t <= end
+    except Exception:
+        return False
 
 def calculate_fare(
     ride_type: str, 
@@ -43,6 +75,7 @@ def calculate_fare(
     days: Optional[int], 
     tier: str, 
     hours: Optional[int], 
+    time_string: str,
     active_rates: Optional[dict], 
     flat_metrics: Optional[dict] = None
 ) -> float:
@@ -50,13 +83,32 @@ def calculate_fare(
     actual_distance = float(distance or 0.0)
     actual_hours = max(1, hours or 1)
     
-    rates = active_rates.get("rates", RATE_CONFIG) if active_rates else RATE_CONFIG
-    config = rates.get(tier, RATE_CONFIG.get(tier, RATE_CONFIG["premium"]))
+    # Resolve rate database configs
+    rates_db = active_rates if active_rates else FALLBACK_RATES
+    global_cfg = rates_db.get("global", FALLBACK_RATES["global"])
+    night_start = global_cfg.get("night_charge_start", "23:59")
+    night_end = global_cfg.get("night_charge_end", "06:00")
     
+    night_applies = is_night_time(time_string, night_start, night_end)
+
+    # 1. Hourly Rental Packages
     if ride_type == "rental":
-        hourly_rate = float(config.get("rate_per_hour", 120.0 if tier == "compact" else (150.0 if tier == "premium" else (200.0 if tier == "suv" else 250.0))))
-        return float(round(hourly_rate * actual_hours))
+        category_rates = rates_db.get("rental", FALLBACK_RATES["rental"])
+        config = category_rates.get(tier, FALLBACK_RATES["rental"][tier])
         
+        base_fare = float(config.get("base_fare", 2300.0))
+        incl_km = float(config.get("included_km", 60.0))
+        incl_hours = float(config.get("included_hours", 6.0))
+        
+        extra_km_charge = max(0.0, actual_distance - incl_km) * float(config.get("extra_km_rate", 12.0))
+        extra_hour_charge = max(0.0, float(actual_hours) - incl_hours) * float(config.get("extra_hour_rate", 180.0))
+        night_charge = float(config.get("night_charge", 200.0)) if night_applies else 0.0
+        discount = float(config.get("default_discount", 500.0))
+        
+        subtotal = base_fare + extra_km_charge + extra_hour_charge + night_charge - discount
+        return float(max(0.0, round(subtotal)))
+
+    # 2. Flat routes matrix override (Local or Intercity)
     if (ride_type == "local" or ride_type == "intercity") and flat_metrics:
         if tier == "compact":
             val = flat_metrics.get("base_fare_compact") or round((flat_metrics.get("base_fare_premium") or flat_metrics.get("base_fare_sedan") or 999) * 0.85)
@@ -70,18 +122,34 @@ def calculate_fare(
         if tier == "muv":
             val = flat_metrics.get("base_fare_muv") or round((flat_metrics.get("base_fare_suv") or 1000) * 1.25)
             return float(val)
-            
+
+    # 3. Intercity Outstation (Round-Trip pricing)
     if ride_type == "outstation":
-        round_trip = actual_distance * 2
-        min_billed = actual_days * 250
-        final_billed = max(round_trip, min_billed)
-        distance_cost = final_billed * float(config.get("rate_per_km", 12.0))
-        allowance_cost = actual_days * float(config.get("driver_allowance_per_day", 300.0))
-        return float(round(distance_cost + allowance_cost))
+        category_rates = rates_db.get("intercity", FALLBACK_RATES["intercity"])
+        config = category_rates.get(tier, FALLBACK_RATES["intercity"][tier])
+        
+        round_trip_dist = actual_distance * 2.0
+        min_billed_km = float(config.get("min_km_per_day", 250.0)) * actual_days
+        billable_km = max(round_trip_dist, min_billed_km)
+        
+        base_fare = billable_km * float(config.get("rate_per_km", 12.0))
+        driver_allowance = float(config.get("driver_allowance", 600.0)) * actual_days
+        night_halt = float(config.get("night_halt", 500.0)) * max(0, actual_days - 1)
+        
+        total = base_fare + driver_allowance + night_halt
+        return float(round(total))
+        
+    # 4. Fallback Local Ride pricing
     else:
-        distance_cost = actual_distance * float(config.get("rate_per_km", 12.0))
-        base_cost = float(config.get("base_cost", 250.0 if tier == "compact" else (300.0 if tier == "premium" else (500.0 if tier == "suv" else 700.0))))
-        return float(round(base_cost + distance_cost))
+        category_rates = rates_db.get("local", FALLBACK_RATES["local"])
+        config = category_rates.get(tier, FALLBACK_RATES["local"][tier])
+        
+        base_fare = float(config.get("base_fare", 550.0))
+        extra_km_charge = max(0.0, actual_distance - 10.0) * float(config.get("extra_km_rate", 12.0))
+        night_charge = float(config.get("night_charge", 200.0)) if night_applies else 0.0
+        
+        total = base_fare + extra_km_charge + night_charge
+        return float(round(total))
 
 def compute_hmac_signature(
     quote_id: str, 
@@ -189,6 +257,7 @@ async def estimate_quote(
             days=request.days,
             tier=request.vehicle_tier,
             hours=request.hours,
+            time_string=request.time_string,
             active_rates=active_rates,
             flat_metrics=flat_metrics
         )
