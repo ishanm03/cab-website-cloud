@@ -9,7 +9,7 @@ from google.cloud.firestore import SERVER_TIMESTAMP
 
 from app.core.firebase import db
 from app.core.config import settings
-from app.core.auth import get_current_user, AuthenticatedUser
+from app.core.auth import get_current_user, require_admin, AuthenticatedUser
 from app.schemas.pydantic_models import (
     AvailabilityResponse,
     QuoteEstimateRequest,
@@ -388,3 +388,68 @@ async def create_booking(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to log booking: {str(e)}"
         )
+
+@router.get("/bookings")
+async def list_rider_bookings(current_user: AuthenticatedUser = Depends(get_current_user)):
+    """
+    Fetch all bookings owned by the authenticated rider, sorted by creation timestamp descending.
+    """
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database offline."
+        )
+    try:
+        docs = db.collection("bookings").where("customer_id", "==", current_user.uid).stream()
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+            # Convert datetime timestamps
+            for ts_field in ["creation_ts", "updated_ts"]:
+                if ts_field in data and not isinstance(data[ts_field], (str, type(None))):
+                    try:
+                        data[ts_field] = data[ts_field].isoformat()
+                    except Exception:
+                        data[ts_field] = str(data[ts_field])
+            results.append(data)
+            
+        # In-memory sorting (fallback in case composite indexes are not built yet in firestore)
+        results.sort(key=lambda x: x.get("creation_ts") or "", reverse=True)
+        return results
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list bookings: {str(e)}"
+        )
+
+@router.get("/admin/bookings")
+async def list_all_bookings(current_user: AuthenticatedUser = Depends(require_admin)):
+    """
+    Fetch all booking records globally, sorted by creation timestamp descending.
+    """
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database offline."
+        )
+    try:
+        docs = db.collection("bookings").stream()
+        results = []
+        for doc in docs:
+            data = doc.to_dict()
+            for ts_field in ["creation_ts", "updated_ts"]:
+                if ts_field in data and not isinstance(data[ts_field], (str, type(None))):
+                    try:
+                        data[ts_field] = data[ts_field].isoformat()
+                    except Exception:
+                        data[ts_field] = str(data[ts_field])
+            results.append(data)
+            
+        results.sort(key=lambda x: x.get("creation_ts") or "", reverse=True)
+        return results
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch admin bookings list: {str(e)}"
+        )
+
