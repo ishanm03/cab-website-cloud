@@ -23,7 +23,7 @@ Open a second terminal window and run:
 ```bash
 python3 -m http.server 5500
 ```
-*Verification*: Open `http://localhost:5500` in your browser to view the landing page.
+*Verification*: Open `http://127.0.0.1:5500` in your browser to view the landing page.
 
 ### 2. Stop Servers
 Press `Ctrl+C` inside each terminal window to shut down the respective servers.
@@ -37,9 +37,10 @@ All backend requests require an active Firebase ID Token as a bearer authorizati
 ### Setup & Credentials Configuration
 
 #### 1. Retrieve the Firebase ID Token
-Open the website in your browser (`http://localhost:5500`), log in, open the browser's developer console (F12), and run:
+Open the website in your browser (`http://127.0.0.1:5500`), log in, open the browser's developer console (F12), and run:
 ```javascript
-// Copy the returned token to your clipboard
+// Dynamically import the auth instance and copy the token to your clipboard
+const { auth } = await import("./modules/shared/firebase.js");
 await auth.currentUser.getIdToken();
 ```
 
@@ -268,7 +269,7 @@ For each test case request in Insomnia:
 ## 💻 Part 2: Frontend UI manual verification
 
 ### Test Case 2.1: Booking Step 1 Validation
-1. Open the booking panel (`http://localhost:5500/modules/booking/booking.html` or CTA click).
+1. Open the booking panel (`http://127.0.0.1:5500/modules/booking/booking.html` or CTA click).
 2. Enter a pickup date and time in the past or within 1 hour from now.
 3. Click "Next".
 4. **Assert**: An alert badge pops up stating `"Minimum scheduling lead time of 2 hours is required."` and blocks step transition.
@@ -323,7 +324,7 @@ Perform this sequential cycle to verify the complete system functionality:
 ### Test Case 4.1: Firestore Write Lockdown Verification
 Confirm that direct writes from the browser to Firestore database paths are strictly blocked (verifying write rules hardening).
 
-1. Open your browser's developer console (F12 or Cmd+Option+J) on `http://localhost:5500`.
+1. Open your browser's developer console (F12 or Cmd+Option+J) on `http://127.0.0.1:5500`.
 2. Execute the following database write request:
    ```javascript
    import { db } from "./modules/shared/firebase.js";
