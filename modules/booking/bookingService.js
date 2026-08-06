@@ -17,22 +17,6 @@ const API_BASE = window.location.origin.includes("localhost") || window.location
     ? "http://localhost:8000/api/v1" 
     : "/api/v1";
 
-// Static Default Fleet Size Configurations (Fallback if Firestore database is empty)
-const DEFAULT_FLEET_SIZES = {
-    compact: 5,
-    premium: 5,
-    suv: 3,
-    muv: 2
-};
-
-// Rate matrix configurations for custom computations (INR)
-const RATE_CONFIG = {
-    compact: { rate_per_km: 10.00, driver_allowance_per_day: 300.00, rate_per_hour: 120.00, base_cost: 250.00 },
-    premium: { rate_per_km: 12.00, driver_allowance_per_day: 300.00, rate_per_hour: 150.00, base_cost: 300.00 },
-    suv:     { rate_per_km: 15.00, driver_allowance_per_day: 400.00, rate_per_hour: 200.00, base_cost: 500.00 },
-    muv:     { rate_per_km: 18.00, driver_allowance_per_day: 500.00, rate_per_hour: 250.00, base_cost: 700.00 }
-};
-
 const bookingService = {
     /**
      * Calculates the estimated grand total fare for a given trip configuration
@@ -46,18 +30,33 @@ const bookingService = {
      * @returns {number} Estimated total fare in INR
      */
     calculateFare(rideType, distance, days, tier, flatMetrics, hours = 0, activeRates = null) {
-        // Fallback checks
+        if (!activeRates) {
+            return 0; // Return 0 if rates have not loaded from Firestore yet
+        }
         const actualDays = Math.max(1, parseInt(days) || 1);
         const actualDistance = parseFloat(distance) || 0;
         const actualHours = Math.max(1, parseInt(hours) || 1);
         
-        const rates = activeRates || RATE_CONFIG;
-        const config = rates[tier] || RATE_CONFIG[tier] || RATE_CONFIG.premium;
+        const rates = activeRates.rates || activeRates;
+        const categoryMap = rideType === "outstation" ? "intercity" : rideType;
+        const categoryConfig = rates[categoryMap];
+        if (!categoryConfig || !categoryConfig[tier]) {
+            return 0;
+        }
+        const config = categoryConfig[tier];
         
         // 1. Hourly rental calculations
         if (rideType === "rental") {
-            const hourlyRate = config.rate_per_hour || (tier === "compact" ? 120 : (tier === "premium" ? 150 : (tier === "suv" ? 200 : 250)));
-            return Math.round(hourlyRate * actualHours);
+            const baseFare = parseFloat(config.base_fare) || 0;
+            const inclKm = parseFloat(config.included_km) || 0;
+            const inclHours = parseFloat(config.included_hours) || 0;
+            
+            const extraKmCharge = Math.max(0, actualDistance - inclKm) * (parseFloat(config.extra_km_rate) || 0);
+            const extraHourCharge = Math.max(0, actualHours - inclHours) * (parseFloat(config.extra_hour_rate) || 0);
+            const discount = parseFloat(config.default_discount) || 0;
+            
+            const subtotal = baseFare + extraKmCharge + extraHourCharge - discount;
+            return Math.max(0, Math.round(subtotal));
         }
 
         // 2. If Local / Intercity and flat-rates are mapped in our routesMatrix, use them!
@@ -68,25 +67,22 @@ const bookingService = {
             if (tier === "muv") return flatMetrics.base_fare_muv || Math.round((flatMetrics.base_fare_suv || 1000) * 1.25);
         }
 
-        // 3. Fallback or Outstation computations (Round-Trip pricing based on West Bengal standard guidelines)
+        // 3. Fallback or Outstation computations
         if (rideType === "outstation") {
-            // Outstation standard: Round-trip distance (pickup to drop to pickup)
             const roundTripDistance = actualDistance * 2;
-            
-            // Standard West Bengal rule: minimum 250 km billed per calendar day
-            const minimumBilledDistance = actualDays * 250;
+            const minimumBilledDistance = actualDays * (parseFloat(config.min_km_per_day) || 250);
             const finalBilledDistance = Math.max(roundTripDistance, minimumBilledDistance);
             
-            // Total = (Billed distance * Rate per km) + (Number of days * Driver daily night allowance)
-            const distanceCost = finalBilledDistance * config.rate_per_km;
-            const allowanceCost = actualDays * config.driver_allowance_per_day;
+            const distanceCost = finalBilledDistance * (parseFloat(config.rate_per_km) || 0);
+            const allowanceCost = actualDays * (parseFloat(config.driver_allowance) || 0);
+            const nightHaltCost = Math.max(0, actualDays - 1) * (parseFloat(config.night_halt) || 0);
             
-            return Math.round(distanceCost + allowanceCost);
+            return Math.round(distanceCost + allowanceCost + nightHaltCost);
         } else {
-            // Fallback for custom local point-to-point without flat-fares
-            const distanceCost = actualDistance * config.rate_per_km;
-            const baseCost = config.base_cost || (tier === "compact" ? 250 : (tier === "premium" ? 300 : (tier === "suv" ? 500 : 700)));
-            return Math.round(baseCost + distanceCost);
+            // Local custom estimation
+            const baseFare = parseFloat(config.base_fare) || 0;
+            const extraKmCharge = Math.max(0, actualDistance - 10) * (parseFloat(config.extra_km_rate) || 0);
+            return Math.round(baseFare + extraKmCharge);
         }
     },
 
@@ -218,8 +214,8 @@ Please confirm driver and vehicle allocation details. Thank you!`;
             const data = await response.json();
             return { rates: data.rates, version_id: data.active_version_id || null };
         } catch (error) {
-            console.error("SethCabs: Error fetching rates via API, falling back to static config:", error);
-            return { rates: RATE_CONFIG, version_id: null };
+            console.error("SethCabs: Error fetching rates via API:", error);
+            throw error;
         }
     },
 

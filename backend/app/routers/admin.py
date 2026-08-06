@@ -1,5 +1,7 @@
 # backend/app/routers/admin.py
 import uuid
+import json
+import os
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from google.cloud.firestore import SERVER_TIMESTAMP
@@ -392,42 +394,6 @@ async def seed_fleet(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-TERMINAL_COORDINATES = {
-    "Howrah Station": [22.5833, 88.3414],
-    "Airport": [22.6547, 88.4467],
-    "Esplanade": [22.5644, 88.3518],
-    "Salt Lake": [22.5735, 88.4331],
-    "Digha": [21.6266, 87.5074],
-    "Mayapur": [23.4231, 88.3908],
-    "Shantiniketan": [23.6787, 87.6934],
-    "Mandarmani": [21.6620, 87.6002],
-    "Tarapith": [24.1139, 87.7971]
-}
-
-ROUTES_MATRIX = {
-    "Howrah Station": {
-        "Airport": { "km": 18, "base_fare_sedan": 999, "base_fare_suv": 1499 },
-        "Digha": { "km": 185, "base_fare_sedan": 4500, "base_fare_suv": 6500 },
-        "Mayapur": { "km": 130, "base_fare_sedan": 3800, "base_fare_suv": 5200 },
-        "Shantiniketan": { "km": 165, "base_fare_sedan": 4200, "base_fare_suv": 5800 }
-    },
-    "Airport": {
-        "Howrah Station": { "km": 18, "base_fare_sedan": 999, "base_fare_suv": 1499 },
-        "Salt Lake": { "km": 12, "base_fare_sedan": 500, "base_fare_suv": 800 },
-        "Esplanade": { "km": 16, "base_fare_sedan": 700, "base_fare_suv": 1100 },
-        "Mandarmani": { "km": 175, "base_fare_sedan": 4800, "base_fare_suv": 6800 }
-    },
-    "Esplanade": {
-        "Airport": { "km": 16, "base_fare_sedan": 700, "base_fare_suv": 1100 },
-        "Digha": { "km": 182, "base_fare_sedan": 4500, "base_fare_suv": 6500 },
-        "Tarapith": { "km": 220, "base_fare_sedan": 5500, "base_fare_suv": 7800 }
-    },
-    "Salt Lake": {
-        "Airport": { "km": 12, "base_fare_sedan": 500, "base_fare_suv": 800 },
-        "Howrah Station": { "km": 15, "base_fare_sedan": 650, "base_fare_suv": 950 }
-    }
-}
-
 @router.post("/sync-schemas")
 async def sync_schemas(current_user: AuthenticatedUser = Depends(require_admin)):
     """
@@ -436,6 +402,11 @@ async def sync_schemas(current_user: AuthenticatedUser = Depends(require_admin))
     if db is None:
         raise HTTPException(status_code=503, detail="Database offline.")
     try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        seed_path = os.path.join(current_dir, "..", "resources", "initial_seed_rates.json")
+        with open(seed_path, "r", encoding="utf-8") as f:
+            seed_data = json.load(f)
+
         # 1. Check vehicles for address
         vehicles_ref = db.collection("vehicles")
         for doc_snap in vehicles_ref.stream():
@@ -450,7 +421,7 @@ async def sync_schemas(current_user: AuthenticatedUser = Depends(require_admin))
             if "address" not in data:
                 doc_snap.reference.update({"address": "Kolkata City Depot"})
                 
-        # 3. Check settings/rates and migrate legacy 'sedan' key to 'premium'
+        # 3. Check settings/rates and migrate legacy 'sedan' key to 'premium', or seed if missing
         rates_ref = db.collection("settings").document("rates")
         rates_snap = rates_ref.get()
         if rates_snap.exists:
@@ -474,11 +445,25 @@ async def sync_schemas(current_user: AuthenticatedUser = Depends(require_admin))
                 
             if rates_need_update:
                 rates_ref.update({"rates": rates})
+        else:
+            # Seed default rates and fleet sizes from JSON
+            rates_ref.set({
+                "rates": seed_data["rates"],
+                "default_fleet_sizes": seed_data["default_fleet_sizes"],
+                "active_version_id": "seed-v1",
+                "updated_ts": SERVER_TIMESTAMP
+            })
+            db.collection("rates_history").document("seed-v1").set({
+                "rates": seed_data["rates"],
+                "creation_ts": SERVER_TIMESTAMP
+            })
                 
         # 4. Seed Predefined Locations if empty
         locations_ref = db.collection("locations")
         if len(list(locations_ref.limit(1).stream())) == 0:
-            for name, coords in TERMINAL_COORDINATES.items():
+            for item in seed_data.get("locations", []):
+                name = item["name"]
+                coords = item["coords"]
                 loc_id = name.lower().replace(" ", "_").strip()
                 loc_id = "".join(c for c in loc_id if c.isalnum() or c == "_")
                 locations_ref.document(loc_id).set({
@@ -493,29 +478,31 @@ async def sync_schemas(current_user: AuthenticatedUser = Depends(require_admin))
         # 5. Seed Predefined Flat Fares if empty
         flat_fares_ref = db.collection("flat_fares")
         if len(list(flat_fares_ref.limit(1).stream())) == 0:
-            for pickup_name, drops in ROUTES_MATRIX.items():
+            for item in seed_data.get("flat_fares", []):
+                pickup_name = item["pickup_name"]
+                drop_name = item["drop_name"]
+                km = item["km"]
+                base_sedan = item["base_fare_sedan"]
+                base_suv = item["base_fare_suv"]
+                
                 pickup_id = pickup_name.lower().replace(" ", "_").strip()
                 pickup_id = "".join(c for c in pickup_id if c.isalnum() or c == "_")
-                for drop_name, metrics in drops.items():
-                    drop_id = drop_name.lower().replace(" ", "_").strip()
-                    drop_id = "".join(c for c in drop_id if c.isalnum() or c == "_")
-                    combined_id = f"{pickup_id}_{drop_id}"
-                    
-                    base_sedan = metrics.get("base_fare_sedan", 999)
-                    base_suv = metrics.get("base_fare_suv", 1499)
-                    
-                    flat_fares_ref.document(combined_id).set({
-                        "id": combined_id,
-                        "pickup_name": pickup_name,
-                        "drop_name": drop_name,
-                        "fares": {
-                            "compact": round(base_sedan * 0.85),
-                            "premium": base_sedan,
-                            "suv": base_suv,
-                            "muv": round(base_suv * 1.25)
-                        },
-                        "creation_ts": SERVER_TIMESTAMP
-                    })
+                drop_id = drop_name.lower().replace(" ", "_").strip()
+                drop_id = "".join(c for c in drop_id if c.isalnum() or c == "_")
+                combined_id = f"{pickup_id}_{drop_id}"
+                
+                flat_fares_ref.document(combined_id).set({
+                    "id": combined_id,
+                    "pickup_name": pickup_name,
+                    "drop_name": drop_name,
+                    "fares": {
+                        "compact": round(base_sedan * 0.85),
+                        "premium": base_sedan,
+                        "suv": base_suv,
+                        "muv": round(base_suv * 1.25)
+                    },
+                    "creation_ts": SERVER_TIMESTAMP
+                })
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

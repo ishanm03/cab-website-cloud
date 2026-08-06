@@ -456,6 +456,15 @@ The application integrates several third-party maps and communication services c
 
 ---
 
+### 7.4 Database Seeding Configuration (Single Source of Truth)
+* **Location**: [`backend/app/resources/initial_seed_rates.json`](file:///Users/ishanmukherjee/AI_Learning/Cab-Website-Build/cab-website-cloud/cab-website-cloud/backend/app/resources/initial_seed_rates.json)
+* **Purpose**: Serves as the raw static data catalog used to initialize/seed Firestore settings rates, default fleet limits, predefined stations, and flat fare routes during a fresh installation.
+* **Code Decoupling**: All javascript and python logic scripts are free of hardcoded rates. If the settings document is deleted or Firestore is unreachable, the system fails gracefully:
+  * Backend returns `HTTP 503 Service Unavailable` (`"Tariff rates configuration is missing from the database."`).
+  * Frontend blocks Step 2 car cards transitions and displays error alerts to the rider, preventing bad calculations.
+
+---
+
 > [!WARNING]
 > **Credential Security**: Never commit the backend `.env` file or Firebase Service Account JSON credentials files into public Git repositories. Ensure these files are added to your project's `.gitignore` file.
 

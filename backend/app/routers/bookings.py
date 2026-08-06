@@ -23,40 +23,6 @@ router = APIRouter(
     tags=["bookings"]
 )
 
-# Static configurations
-DEFAULT_FLEET_SIZES = {
-    "compact": 5,
-    "premium": 5,
-    "suv": 3,
-    "muv": 2
-}
-
-# Fallback rate parameters matching docs/fare_logic_design.md
-FALLBACK_RATES = {
-    "local": {
-        "compact": { "base_fare": 550.0, "extra_km_rate": 12.0, "waiting_rate": 3.0, "night_charge": 200.0 },
-        "premium": { "base_fare": 650.0, "extra_km_rate": 13.0, "waiting_rate": 4.0, "night_charge": 300.0 },
-        "suv":     { "base_fare": 750.0, "extra_km_rate": 14.0, "waiting_rate": 5.0, "night_charge": 400.0 },
-        "muv":     { "base_fare": 850.0, "extra_km_rate": 15.0, "waiting_rate": 5.0, "night_charge": 500.0 }
-    },
-    "rental": {
-        "compact": { "base_fare": 2300.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 12.0, "extra_hour_rate": 180.0, "night_charge": 200.0, "default_discount": 500.0 },
-        "premium": { "base_fare": 2500.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 13.0, "extra_hour_rate": 240.0, "night_charge": 300.0, "default_discount": 500.0 },
-        "suv":     { "base_fare": 2800.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 14.0, "extra_hour_rate": 300.0, "night_charge": 400.0, "default_discount": 500.0 },
-        "muv":     { "base_fare": 3300.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 16.0, "extra_hour_rate": 360.0, "night_charge": 500.0, "default_discount": 500.0 }
-    },
-    "intercity": {
-        "compact": { "rate_per_km": 12.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
-        "premium": { "rate_per_km": 14.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
-        "suv":     { "rate_per_km": 18.0, "driver_allowance": 800.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
-        "muv":     { "rate_per_km": 22.0, "driver_allowance": 800.0, "min_km_per_day": 250.0, "night_halt": 500.0 }
-    },
-    "global": {
-        "night_charge_start": "23:59",
-        "night_charge_end": "06:00"
-    }
-}
-
 def is_night_time(time_str: str, start_str: str = "23:59", end_str: str = "06:00") -> bool:
     try:
         t = datetime.strptime(time_str, "%H:%M").time()
@@ -84,9 +50,14 @@ def calculate_fare(
     actual_distance = float(distance or 0.0)
     actual_hours = max(1, hours or 1)
     
-    # Resolve rate database configs
-    rates_db = active_rates.get("rates", active_rates) if active_rates else FALLBACK_RATES
-    global_cfg = rates_db.get("global", FALLBACK_RATES["global"])
+    if not active_rates or "rates" not in active_rates:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Tariff rates configuration is not defined in active settings."
+        )
+        
+    rates_db = active_rates["rates"]
+    global_cfg = rates_db.get("global", {})
     night_start = global_cfg.get("night_charge_start", "23:59")
     night_end = global_cfg.get("night_charge_end", "06:00")
     
@@ -94,17 +65,22 @@ def calculate_fare(
 
     # 1. Hourly Rental Packages
     if ride_type == "rental":
-        category_rates = rates_db.get("rental", FALLBACK_RATES["rental"])
-        config = category_rates.get(tier, FALLBACK_RATES["rental"][tier])
+        category_rates = rates_db.get("rental")
+        if not category_rates or tier not in category_rates:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Rental tariff config is missing for vehicle class {tier}."
+            )
+        config = category_rates[tier]
         
-        base_fare = float(config.get("base_fare", 2300.0))
-        incl_km = float(config.get("included_km", 60.0))
-        incl_hours = float(config.get("included_hours", 6.0))
+        base_fare = float(config.get("base_fare", 0.0))
+        incl_km = float(config.get("included_km", 0.0))
+        incl_hours = float(config.get("included_hours", 0.0))
         
-        extra_km_charge = max(0.0, actual_distance - incl_km) * float(config.get("extra_km_rate", 12.0))
-        extra_hour_charge = max(0.0, float(actual_hours) - incl_hours) * float(config.get("extra_hour_rate", 180.0))
-        night_charge = float(config.get("night_charge", 200.0)) if night_applies else 0.0
-        discount = float(config.get("default_discount", 500.0))
+        extra_km_charge = max(0.0, actual_distance - incl_km) * float(config.get("extra_km_rate", 0.0))
+        extra_hour_charge = max(0.0, float(actual_hours) - incl_hours) * float(config.get("extra_hour_rate", 0.0))
+        night_charge = float(config.get("night_charge", 0.0)) if night_applies else 0.0
+        discount = float(config.get("default_discount", 0.0))
         
         subtotal = base_fare + extra_km_charge + extra_hour_charge + night_charge - discount
         return float(max(0.0, round(subtotal)))
@@ -126,28 +102,38 @@ def calculate_fare(
 
     # 3. Intercity Outstation (Round-Trip pricing)
     if ride_type == "outstation":
-        category_rates = rates_db.get("intercity", FALLBACK_RATES["intercity"])
-        config = category_rates.get(tier, FALLBACK_RATES["intercity"][tier])
+        category_rates = rates_db.get("intercity")
+        if not category_rates or tier not in category_rates:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Intercity tariff config is missing for vehicle class {tier}."
+            )
+        config = category_rates[tier]
         
         round_trip_dist = actual_distance * 2.0
-        min_billed_km = float(config.get("min_km_per_day", 250.0)) * actual_days
+        min_billed_km = float(config.get("min_km_per_day", 0.0)) * actual_days
         billable_km = max(round_trip_dist, min_billed_km)
         
-        base_fare = billable_km * float(config.get("rate_per_km", 12.0))
-        driver_allowance = float(config.get("driver_allowance", 600.0)) * actual_days
-        night_halt = float(config.get("night_halt", 500.0)) * max(0, actual_days - 1)
+        base_fare = billable_km * float(config.get("rate_per_km", 0.0))
+        driver_allowance = float(config.get("driver_allowance", 0.0)) * actual_days
+        night_halt = float(config.get("night_halt", 0.0)) * max(0, actual_days - 1)
         
         total = base_fare + driver_allowance + night_halt
         return float(round(total))
         
     # 4. Fallback Local Ride pricing
     else:
-        category_rates = rates_db.get("local", FALLBACK_RATES["local"])
-        config = category_rates.get(tier, FALLBACK_RATES["local"][tier])
+        category_rates = rates_db.get("local")
+        if not category_rates or tier not in category_rates:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Local tariff config is missing for vehicle class {tier}."
+            )
+        config = category_rates[tier]
         
-        base_fare = float(config.get("base_fare", 550.0))
-        extra_km_charge = max(0.0, actual_distance - 10.0) * float(config.get("extra_km_rate", 12.0))
-        night_charge = float(config.get("night_charge", 200.0)) if night_applies else 0.0
+        base_fare = float(config.get("base_fare", 0.0))
+        extra_km_charge = max(0.0, actual_distance - 10.0) * float(config.get("extra_km_rate", 0.0))
+        night_charge = float(config.get("night_charge", 0.0)) if night_applies else 0.0
         
         total = base_fare + extra_km_charge + night_charge
         return float(round(total))
@@ -174,12 +160,30 @@ async def get_availability(date: str):
     Overbooking inventory check: returns availability status for each vehicle class.
     """
     if db is None:
-        # DB offline fallback
-        return AvailabilityResponse(availability={k: True for k in DEFAULT_FLEET_SIZES.keys()})
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database offline."
+        )
         
     try:
-        # 1. Fetch fleet configurations
-        fleet_sizes = DEFAULT_FLEET_SIZES.copy()
+        # Load active fleet settings document from DB to resolve default_fleet_sizes
+        rates_doc = db.collection("settings").document("rates").get()
+        if not rates_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Settings rates configuration is missing from the database."
+            )
+        
+        settings_data = rates_doc.to_dict()
+        default_fleet = settings_data.get("default_fleet_sizes", {
+            "compact": 5,
+            "premium": 5,
+            "suv": 3,
+            "muv": 2
+        })
+        
+        # 1. Fetch active registered fleet configurations
+        fleet_sizes = default_fleet.copy()
         vehicles = db.collection("vehicles").where("status", "==", "active").stream()
         vehicle_list = [v.to_dict() for v in vehicles]
         if vehicle_list:
@@ -207,10 +211,12 @@ async def get_availability(date: str):
                 
         # 3. Compile availability map
         avail = {}
-        for tier in DEFAULT_FLEET_SIZES.keys():
-            avail[tier] = booking_counts.get(tier, 0) < fleet_sizes.get(tier, DEFAULT_FLEET_SIZES[tier])
+        for tier in default_fleet.keys():
+            avail[tier] = booking_counts.get(tier, 0) < fleet_sizes.get(tier, default_fleet[tier])
             
         return AvailabilityResponse(availability=avail)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -228,10 +234,19 @@ async def estimate_quote(
     try:
         # Load active rates configuration from DB
         active_rates = None
-        if db is not None:
-            doc = db.collection("settings").document("rates").get()
-            if doc.exists:
-                active_rates = doc.to_dict()
+        if db is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database offline."
+            )
+        
+        doc = db.collection("settings").document("rates").get()
+        if not doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Tariff rates configuration is missing from the database."
+            )
+        active_rates = doc.to_dict()
                 
         # Query flat fare overrides
         flat_metrics = None

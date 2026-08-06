@@ -336,3 +336,12 @@ Confirm that direct writes from the browser to Firestore database paths are stri
 * **Negative Values**: Submit estimation requests containing negative kilometers (e.g. `km: -20`). Confirm that backend validators block the request with `HTTP 422 Unprocessable Entity`.
 * **Expired Quotes**: Wait 31 minutes after requesting an estimation. Submit booking using the signature. Confirm that backend returns `HTTP 400 Bad Request` with `"Quote signature has expired"`.
 * **Tampered Fare values**: Intercept quote request response. Modify `estimated_fare` to `1.0` in the checkout payload and submit `POST /bookings`. Confirm that signature validation fails with `HTTP 400 Bad Request`.
+
+### Test Case 4.3: Missing Database Settings Rates Document Behavior
+Confirm that the application handles a missing or deleted settings rates document gracefully without calculating obsolete pricing.
+
+1. Access your backend database (or run a local test server without seeding the `settings/rates` document).
+2. Call `POST /quotes/estimate` or open the booking panel in the frontend browser and proceed to Step 2.
+3. **Assert (Backend)**: Requests return `HTTP 503 Service Unavailable` with body `{"detail": "Tariff rates configuration is missing from the database."}`.
+4. **Assert (Frontend)**: Browser displays an alert banner `"Error fetching rates: HTTP error 503"` and blocks progression from Step 1, preventing the rider from placing a booking.
+

@@ -3111,15 +3111,7 @@ async function updateAdminRouteAndFare() {
         );
     } catch (e) {
         console.error("Error computing booking fare:", e);
-        computedBaseFare = bookingService.calculateFare(
-            category,
-            distanceKm,
-            days,
-            tier,
-            metrics,
-            hours,
-            null
-        );
+        computedBaseFare = 0;
     }
     
     currentAdminBaseFare = computedBaseFare;
