@@ -371,3 +371,83 @@ When an administrator assigns a driver to a vehicle (or vehicle to a driver), th
   1. Fetch document metadata.
   2. Clear references from any linked entities (unlink driver/car).
   3. Delete document from collection path `/vehicles/{id}` or `/drivers/{id}`.
+
+---
+
+## 7. ⚙️ Configuration Management
+
+This section lists all configurations used across the frontend and backend, detailing their purpose, variables, and where they reside in the directory structure.
+
+### 7.1 Client-Side Firebase Configuration
+* **Location**: [`modules/shared/firebase.js`](file:///Users/ishanmukherjee/AI_Learning/Cab-Website-Build/cab-website-cloud/cab-website-cloud/modules/shared/firebase.js)
+* **Configuration Object**:
+  ```javascript
+  const firebaseConfig = {
+      apiKey: "AIzaSyCDaeBao1YQyN-yycmvthxu-eYJatexX-o",
+      authDomain: "ishancabproject.firebaseapp.com",
+      projectId: "ishancabproject",
+      storageBucket: "ishancabproject.firebasestorage.app",
+      messagingSenderId: "127785774256",
+      appId: "1:127785774256:web:d7629170ddee8e876edf75"
+  };
+  ```
+* **Variables Description**:
+  * `apiKey`: Secret key used for authenticating frontend SDK client requests.
+  * `authDomain`: Domain for hosting Firebase Auth user sign-in handlers.
+  * `projectId`: Firebase console project identifier.
+  * `storageBucket`: Storage bucket URI for asset management.
+  * `messagingSenderId`: Messaging credentials identifier.
+  * `appId`: Unique application registration identifier.
+
+---
+
+### 7.2 Backend Environment Configuration
+* **Location**: `.env` (located in backend root directory `backend/.env`)
+* **Environment Class Schema**: Loaded into `Settings` configuration model in [`backend/app/core/config.py`](file:///Users/ishanmukherjee/AI_Learning/Cab-Website-Build/cab-website-cloud/cab-website-cloud/backend/app/core/config.py)
+* **Configuration Variables Template**:
+  ```env
+  PROJECT_NAME="SethCabs Backend"
+  CORS_ORIGINS="http://localhost:5500,http://127.0.0.1:5500"
+  HMAC_QUOTE_SECRET="temporary_dev_hmac_quote_secret_key_12345"
+  FIREBASE_SERVICE_ACCOUNT_PATH="/path/to/service-account.json"
+  ```
+* **Variables Description**:
+  * `PROJECT_NAME`: Title of the backend server.
+  * `CORS_ORIGINS`: Allowed hostnames list permitting browser fetch requests.
+  * `HMAC_QUOTE_SECRET`: Secret hashing key for cryptographically signing booking quotes.
+  * `FIREBASE_SERVICE_ACCOUNT_PATH`: File path to the JSON key of your Firebase Service Account (optional if running on GCP with Application Default Credentials).
+
+---
+
+### 7.3 External APIs & Services Configuration
+The application integrates several third-party maps and communication services configured dynamically:
+
+#### 1. OpenStreetMap Tile Server
+* **Location**: Configured directly in `tileLayer` initializers inside:
+  * [`modules/booking/bookingUI.js`](file:///Users/ishanmukherjee/AI_Learning/Cab-Website-Build/cab-website-cloud/cab-website-cloud/modules/booking/bookingUI.js#L343-L346)
+  * [`modules/booking/activityUI.js`](file:///Users/ishanmukherjee/AI_Learning/Cab-Website-Build/cab-website-cloud/cab-website-cloud/modules/booking/activityUI.js#L459-L461)
+  * [`modules/admin/adminUI.js`](file:///Users/ishanmukherjee/AI_Learning/Cab-Website-Build/cab-website-cloud/cab-website-cloud/modules/admin/adminUI.js#L1142)
+* **Configuration URL**: `https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png`
+* **Purpose**: Fetches static background map graphic tiles.
+
+#### 2. Nominatim Geocoder API
+* **Location**: Integrated inside search handlers in `bookingUI.js` and `adminUI.js`.
+* **Configuration URL**: `https://nominatim.openstreetmap.org/search?format=json&q={query}&limit=1`
+* **Purpose**: Translates textual address entries into coordinate pins (latitude & longitude) dynamically.
+
+#### 3. OSRM Routing Engine API
+* **Location**: Initialized in coordinate preview functions in `bookingUI.js`.
+* **Configuration URL**: `https://router.project-osrm.org/route/v1/driving/{lng1},{lat1};{lng2},{lat2}?overview=full&geometries=geojson`
+* **Purpose**: Calculates driving routes, coordinates path vectors, and tracks total distance parameters.
+
+#### 4. WhatsApp Click-to-Chat Dispatch Service
+* **Location**: Configured inside `compileWhatsAppLink()` inside [`modules/booking/bookingService.js`](file:///Users/ishanmukherjee/AI_Learning/Cab-Website-Build/cab-website-cloud/cab-website-cloud/modules/booking/bookingService.js#L189-L206)
+* **Configuration Phone Number**: `918981538038` (Support desk/Dispatch controller contact phone)
+* **Configuration URL Schema**: `https://wa.me/{phone_number}?text={encoded_message}`
+* **Purpose**: Redirects riders on checkout completion to open a WhatsApp message containing full booking details pre-compiled.
+
+---
+
+> [!WARNING]
+> **Credential Security**: Never commit the backend `.env` file or Firebase Service Account JSON credentials files into public Git repositories. Ensure these files are added to your project's `.gitignore` file.
+
