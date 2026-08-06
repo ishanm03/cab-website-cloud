@@ -1,12 +1,15 @@
-# 🚖 IshanCabs: End-to-End (E2E) Architecture Document
+# 🚖 SethCabs: End-to-End (E2E) Architecture Document
 
-This document provides a comprehensive end-to-end technical overview of the **IshanCabs Web Application** architecture. It describes the client-first serverless structure, outlines user interaction sequence flows for different modules, documents database schemas, and models document relationships.
+This document provides a comprehensive end-to-end technical overview of the **SethCabs Web Application** architecture. It describes the hybrid REST-and-realtime structure, outlines user interaction sequence flows for different modules, documents database schemas, and models document relationships.
 
 ---
 
 ## 1. 🌐 High-Level System Architecture
 
-IshanCabs is built on a **Serverless, Client-First Architecture**. The application does not require a custom backend application server; instead, the browser executes the core application logic and establishes secure, direct connections to cloud services and third-party APIs.
+SethCabs is built on a **Hybrid REST-and-Realtime Architecture**. 
+* **Reads (Real-Time Streams)**: Web clients (both Riders and Administrators) connect directly to Cloud Firestore using the client-side Firebase SDK's `onSnapshot` listeners to receive instantaneous UI updates.
+* **Writes (Secure Mutations)**: 100% of data writes (quotes, bookings, ride approvals, status updates, registry edits, feedback, and catalog settings) are routed exclusively through the FastAPI backend server. Direct client write mutations are completely blocked.
+* **Security & Auth**: Secure role-based access control (RBAC) is governed by Firebase Authentication custom claims (`{"admin": true}`) checked in backend headers. Fare details are protected against tampering using HMAC-SHA256 signatures generated and verified on the server.
 
 ```mermaid
 graph TB
@@ -22,6 +25,9 @@ graph TB
     Browser["Web UI Layer (HTML, CSS, JS)
     Renders Premium Glassmorphic Cards"]:::system
     
+    FastAPI["FastAPI Backend Server
+    (Secure REST API Mutations & Quotes)"]:::system
+
     Firebase["Firebase Authentication
     Secure Sessions & Users Catalog"]:::cloud
     
@@ -30,18 +36,17 @@ graph TB
     
     OSRM["OSRM & Nominatim APIs
     Routing Geometry & Geocoding"]:::external
-    
-    NotificationEngine["CallMeBot / EmailJS
-    Outbound Alert Dispatches"]:::external
 
     %% Interconnections
     Rider -->|"Books cab, views history"| Browser
     Admin -->|"Manages roster & approves bookings"| Browser
     
-    Browser <-->|"Authenticates session"| Firebase
-    Browser <-->|"Direct CRUD / Real-time snapshot streams"| Firestore
-    Browser -->|"Requests geocodes & route coordinates"| OSRM
-    Browser -->|"Dispatches transactional notifications"| NotificationEngine
+    Browser <-->|"Authenticates session & obtains JWT"| Firebase
+    Browser -->|"Direct Real-time snapshot read streams"| Firestore
+    Browser -->|"POST writes & estimation requests"| FastAPI
+    FastAPI <-->|"Firestore Admin SDK writes & claims"| Firestore
+    FastAPI <-->|"Validates auth tokens"| Firebase
+    FastAPI -->|"Requests geocodes & route coordinates"| OSRM
 ```
 
 ---
@@ -59,6 +64,7 @@ sequenceDiagram
     actor Rider as Rider / User
     participant Browser as Web Browser (app.js)
     participant FBAuth as Firebase Auth
+    participant FastAPI as FastAPI (/me/profile)
     participant Firestore as Firestore (/users)
     actor Admin as Administrator
 
@@ -67,8 +73,11 @@ sequenceDiagram
     
     alt User is Logged In
         FBAuth-->>Browser: Returns user object (UID, Email)
-        Browser->>Firestore: Queries user profile details by UID
-        Firestore-->>Browser: Returns user document (role)
+        Browser->>Browser: Requests JWT token claim refresh (getIdToken(true))
+        Browser->>FastAPI: GET /api/v1/me/profile (with Bearer Token)
+        FastAPI->>Firestore: Fetches user document from /users
+        Firestore-->>FastAPI: Returns user document
+        FastAPI-->>Browser: Returns profile JSON (role)
         
         alt User Role is "admin"
             Browser->>Browser: Hides Booking buttons & reveals "Admin Panel" CTA
@@ -93,8 +102,8 @@ sequenceDiagram
     actor Rider as Rider / User
     participant Page as Booking UI (booking.html)
     participant Controller as Controller (bookingUI.js)
-    participant Maps as Leaflet & OSRM API
-    participant Engine as Engine (bookingService.js)
+    participant Maps as Leaflet & Nominatim APIs
+    participant FastAPI as FastAPI Backend (/quotes/estimate)
     participant Firestore as Cloud Firestore
 
     Rider->>Page: Enters Route Details (Step 1)
@@ -109,41 +118,46 @@ sequenceDiagram
     Rider->>Page: Submits Step 1 (pickup datetime, locations)
     Controller->>Controller: Enforces 2-hour scheduling lead time verification
     
+    Controller->>FastAPI: POST /api/v1/quotes/estimate (pickup/drop locations, times, coordinates)
+    
     alt Standard Ride Category
-        Controller->>Maps: Query OSRM Driving distance & geometry
-        Maps-->>Controller: Returns route polyline array & total kilometers
+        FastAPI->>Maps: Query OSRM Driving distance & geometry
+        Maps-->>FastAPI: Returns route polyline array & total kilometers
     else Rental Category
-        Controller->>Controller: Bypasses Drop parameters & OSRM requests
+        FastAPI->>FastAPI: Bypasses Drop parameters & OSRM requests
     end
     
-    Controller->>Engine: Run availability checking & fare estimations
-    Engine->>Firestore: Check database collections for active rate configuration matrix
-    Firestore-->>Engine: Returns active rates (base, rate_per_km, rate_per_hour)
-    Engine->>Engine: Compiles estimated fares per vehicle tier
-    
-    Engine->>Firestore: Check overbookings (compares active booking counts vs. vehicle roster size)
-    Firestore-->>Engine: Returns capacity states
+    FastAPI->>Firestore: Fetch active rates and check overbookings
+    Firestore-->>FastAPI: Returns rate configurations & current booking counts
+    FastAPI->>FastAPI: Checks overbooking ratios (compares active booking counts vs. vehicle roster size)
     
     alt Fleet Tier is Sold Out
-        Engine-->>Page: Displays "Sold Out" state and locks tier card selection
+        FastAPI-->>Controller: Returns Sold Out tier status
+        Controller-->>Page: Displays "Sold Out" state and locks tier card selection
     else Fleet Tier is Available
-        Engine-->>Page: Displays calculated fares for Sedan, SUV, and MUV cards
+        FastAPI->>FastAPI: Computes estimated fare and signs parameters with HMAC-SHA256
+        FastAPI-->>Controller: Returns calculated fares & cryptographically signed quote
+        Controller-->>Page: Displays calculated fares for Compact, Premium, SUV, and MUV cards
     end
 
     Rider->>Page: Selects class card & advances to Review (Step 3)
     
     opt Enters Promo Discount Code
-        Controller->>Firestore: Query coupon details from /offers collection
-        Firestore-->>Controller: Returns status, minimum threshold, and discount value
-        Controller->>Controller: Validates promo restrictions & applies deduction
+        Controller->>FastAPI: POST /api/v1/offers/validate (code, base_fare)
+        FastAPI->>Firestore: Query coupon details from /offers collection
+        Firestore-->>FastAPI: Returns coupon configuration
+        FastAPI->>FastAPI: Validates coupon status & returns discount value
+        FastAPI-->>Controller: Returns calculated discount
+        Controller->>Controller: Updates fare breakdown UI with applied discount
     end
 
     Rider->>Page: Clicks "Confirm & Book"
-    Controller->>Engine: Call createBooking(payload)
-    Note over Engine: Sets driver_assignment to null (unallocated queue)
-    Engine->>Firestore: Writes new record in /bookings collection
-    Firestore-->>Engine: Document logged, returns Booking ID (BK-YYYYMMDD-XXXX)
-    Engine-->>Page: Triggers success banner
+    Controller->>FastAPI: POST /api/v1/bookings (trip_details, fare_details, quote_signature, quote_id)
+    Note over FastAPI: Verifies quote HMAC signature, expiration time, and checks signature anti-replay nonce
+    FastAPI->>Firestore: Writes new record in /bookings collection (booking_channel: "website")
+    Firestore-->>FastAPI: Document logged, returns Booking ID (BK-YYYYMMDD-XXXX)
+    FastAPI-->>Controller: Returns Booking ID & success status
+    Controller-->>Page: Triggers success banner
     Page-->>Rider: Shows success screen & schedules auto-redirect to home
 ```
 
@@ -158,6 +172,7 @@ sequenceDiagram
     actor Admin as Fleet Administrator
     participant Panel as Admin Panel (admin.html)
     participant Logic as Admin Controller (adminUI.js)
+    participant FastAPI as FastAPI Backend (/admin/bookings/{id})
     participant Firestore as Cloud Firestore
 
     Note over Logic: Snapshot listeners are active for bookings, vehicles, and drivers
@@ -165,30 +180,24 @@ sequenceDiagram
     Logic->>Panel: Populate list tables and update dashboard KPI metrics counters
 
     Admin->>Panel: Accesses "Requested" booking list & clicks "Accept Ride"
-    Logic->>Logic: Calls loadFleetRoster()
-    Note over Logic: Roster entries = active drivers associated with active vehicles
-    
-    Logic->>Firestore: Query existing bookings where status is "confirmed" or "active"
-    Firestore-->>Logic: Returns busy driver phones & vehicle license plates
-    
+    Logic->>Logic: Compiles list of active drivers and vehicles from snapshot
     Logic->>Panel: Populate Dropdown Roster grouped by Tier
     Note over Panel: Options holding busy drivers/cars are flagged as "[Busy - On Ride]"
     
-    Admin->>Panel: Selects dynamic driver-car option (or fills manual text overrides)
+    Admin->>Panel: Selects dynamic driver-car option & clicks "Confirm Allocation"
     
-    opt Choice has "[Busy - On Ride]" Tag
-        Logic->>Panel: Renders inline warning notification on screen
-    end
+    Logic->>FastAPI: PATCH /api/v1/admin/bookings/{id} (status: "confirmed", driver_assignment: {...})
     
-    Admin->>Panel: Adjusts manual override discount (optional) & clicks "Confirm Allocation"
-    
-    Logic->>Logic: Executes double-booking conflict verification
+    FastAPI->>Firestore: Execute Firestore transaction to verify driver/vehicle allocation conflicts
+    Firestore-->>FastAPI: Transaction status check (no double bookings)
     
     alt Selected Roster Entry is Confirmed/Active on another ride
+        FastAPI-->>Logic: Return HTTP 400 (Conflict error)
         Logic->>Panel: Blocks submit action & triggers warning alert block
     else Selected Roster Entry is Free
-        Logic->>Firestore: Updates /bookings/{id} (status: "confirmed", driver_assignment: {...})
-        Firestore-->>Logic: Record updated successfully
+        FastAPI->>Firestore: Updates /bookings/{id} details atomically
+        Firestore-->>FastAPI: Commit success
+        FastAPI-->>Logic: Returns HTTP 200 (Success)
         Logic->>Panel: Closes modal and updates lists in real-time
     end
 ```
@@ -204,23 +213,30 @@ sequenceDiagram
     actor Admin as Fleet Administrator
     participant Panel as Admin Panel
     participant Logic as Admin Controller (adminUI.js)
+    participant FastAPI as FastAPI Backend (/admin/vehicles or /admin/drivers)
     participant Firestore as Cloud Firestore
 
     Admin->>Panel: Fills Vehicle Form (Plate: WB02A1111) & assigns Driver (Phone: 918981538038)
     Admin->>Panel: Clicks "Save Vehicle"
-    Logic->>Firestore: Writes vehicle document (doc_id: "WB02A1111", assigned_driver_id: "918981538038")
+    Logic->>FastAPI: POST /api/v1/admin/vehicles (doc_id: "WB02A1111", assigned_driver_id: "918981538038")
+    
+    FastAPI->>Firestore: Fetch previous associations and execute atomic updates
+    Firestore-->>FastAPI: Previous links fetched
     
     opt Vehicle was previously linked to another driver
-        Logic->>Firestore: Updates previous driver document setting assigned_vehicle_id: null
+        FastAPI->>Firestore: Updates previous driver document setting assigned_vehicle_id: null
     end
     
-    Logic->>Firestore: Updates assigned driver document setting assigned_vehicle_id: "WB02A1111"
+    FastAPI->>Firestore: Updates assigned driver document setting assigned_vehicle_id: "WB02A1111"
     
     opt Driver was previously linked to another vehicle
-        Logic->>Firestore: Updates previous vehicle document setting assigned_driver_id: null
+        FastAPI->>Firestore: Updates previous vehicle document setting assigned_driver_id: null
     end
     
-    Firestore-->>Logic: Write operations complete
+    FastAPI->>Firestore: Writes vehicle document (doc_id: "WB02A1111", assigned_driver_id: "918981538038")
+    Firestore-->>FastAPI: Database transaction committed
+    
+    FastAPI-->>Logic: Returns success status
     Logic->>Panel: Clears forms, repopulates dropdown selectors, and updates tables via snapshot
 ```
 
@@ -242,6 +258,7 @@ Contains customer profile details and roles used for authentication boundaries.
 | `phone` | `string` | Contact phone number. |
 | `role` | `string` | User permission role (`"rider"` or `"admin"`). |
 | `creation_ts` | `Timestamp` | Record creation date and time. |
+| `updated_ts` | `Timestamp` | Last modification timestamp. |
 
 ---
 
@@ -255,6 +272,7 @@ Stores transactional ride requests, parameters, fare details, and driver/car all
 | `customer_id` | `string` | Reference ID matching `/users.uid`. |
 | `customer_name` | `string` | User name snapshot copy for fast rendering. |
 | `customer_phone` | `string` | User phone snapshot copy. |
+| `booking_channel` | `string` | Source of booking (`"website"`, `"admin"`). |
 | `status` | `string` | State lifecycle: `"pending_approval"`, `"confirmed"`, `"active"`, `"completed"`, `"rejected"`, `"cancelled"`. |
 | `payment_status` | `string` | Ledger status: `"pending"`, `"paid"`. |
 | `creation_ts` | `Timestamp` | Booking checkout timestamp. |
@@ -278,36 +296,48 @@ Stores transactional ride requests, parameters, fare details, and driver/car all
 *   `route_polyline`: `string` or `null` (JSON stringified array of coordinates).
 
 #### `fare_details` Map Structure:
-*   `vehicle_tier`: `string` (`"sedan"`, `"suv"`, `"muv"`).
+*   `vehicle_tier`: `string` (`"compact"`, `"premium"`, `"suv"`, `"muv"`).
 *   `estimated_km`: `number` (Driving distance).
 *   `base_fare`: `number` (Initial fare configuration mapping).
+*   `extra_distance_charge`: `number` (Charges for extra kilometers in local/rental).
+*   `waiting_charge`: `number` (Charges for waiting hours).
+*   `night_charge`: `number` (Additional night driving charges).
+*   `toll_charges`: `number` (Toll gates fees).
+*   `parking_charges`: `number` (Parking lot fees).
+*   `driver_allowance`: `number` (Operator daily allowance).
 *   `discount_amount`: `number` (Discount amount applied).
-*   `promo_code`: `string` or `null` (Coupon code code). Foreign Key referencing `/offers.id`.
-*   `estimated_fare`: `number` (Grand total amount: `base_fare - discount_amount`).
-*   `rates_version_id`: `string` or `null` (Foreign Key referencing `/rates_history.id`).
+*   `promo_code`: `string` or `null` (Applied coupon code).
+*   `estimated_fare`: `number` (Grand total amount).
+*   `rates_version_id`: `string` or `null` (Historical rates reference).
+*   `quote_signature`: `string` (Cryptographic verification signature).
 
 #### `driver_assignment` Map Structure (or `null`):
-*   `driver_name`: `string` (Allocated operator name).
-*   `driver_phone`: `string` (Allocated operator phone).
-*   `vehicle_number`: `string` (Allocated vehicle plate number).
+*   `driver_id`: `string` (Allocated driver phone).
+*   `driver_name`: `string` (Allocated driver name).
+*   `vehicle_id`: `string` (Allocated vehicle plate number).
+*   `vehicle_model`: `string` (Allocated vehicle model name).
+*   `assigned_at`: `string` (Timestamp of allocation).
 
 #### `feedback` Map Structure (or `null`):
 *   `rating`: `number` (Integer range: 1 to 5).
 *   `comments`: `string` (Feedback review comments).
+*   `submitted_ts`: `Timestamp` (Time when feedback was submitted).
 
 ---
 
 ### 3. Vehicles Collection (`/vehicles/{vehicle_id}`)
 Maintains the operator fleet inventory.
-*   **Document ID**: Standardized uppercase alphanumeric plate number (e.g. `WB02A1111` for "WB-02-A-1234").
+*   **Document ID**: Standardized uppercase alphanumeric plate number (e.g. `WB02A1111` for "WB-02-A-1111").
 
 | Field Key | Data Type | Description |
 | :--- | :--- | :--- |
 | `model` | `string` | Vehicle model name (e.g., `"Maruti Swift Dzire"`, `"Toyota Innova"`). |
 | `plate_number` | `string` | Display license plate string with formatted dashes. |
-| `tier` | `string` | Pricing category classification (`"sedan"`, `"suv"`, `"muv"`). |
+| `tier` | `string` | Pricing category classification (`"compact"`, `"premium"`, `"suv"`, `"muv"`). |
 | `status` | `string` | Maintenance state (`"active"`, `"maintenance"`, `"inactive"`). |
 | `assigned_driver_id` | `string` or `null` | Reference ID matching `/drivers.id` (stripped phone). |
+| `passengers` | `number` | Seat capacity. |
+| `address` | `string` | Primary depot location. |
 | `creation_ts` | `Timestamp` | Roster log timestamp. |
 
 ---
@@ -321,24 +351,25 @@ Holds the operator drivers registry.
 | `name` | `string` | Driver operator's full name. |
 | `phone` | `string` | Format contact number string (e.g., `"+918981538038"`). |
 | `license_number` | `string` | Driver's commercial licensing ID. |
-| `status` | `string` | Availability state (`"active"`, `"sick"`, `"on_leave"`, `"inactive"`). |
+| `status` | `string` | Availability state (`"active"`, `"inactive"`, `"on_trip"`). |
 | `assigned_vehicle_id` | `string` or `null` | Reference ID matching `/vehicles.id` (stripped plate). |
+| `address` | `string` | Driver local depot assignment. |
 | `creation_ts` | `Timestamp` | Registration log timestamp. |
 
 ---
 
 ### 5. Offers Collection (`/offers/{code}`)
 Coupon codes list compiled for customer deductions.
-*   **Document ID**: Upper-case promo code title string (e.g., `SAVE200`).
+*   **Document ID**: Upper-case promo code title string (e.g., `WELCOME100`).
 
 | Field Key | Data Type | Description |
 | :--- | :--- | :--- |
 | `code` | `string` | Coupon display code. |
-| `type` | `string` | Deduction strategy (`"flat"` value or `"percentage"` ratio). |
-| `value` | `number` | Numeric deduction rate (e.g. `200` for flat or `15` for 15%). |
+| `discount_type` | `string` | Deduction strategy (`"flat"` value or `"percentage"` ratio). |
+| `discount_value` | `number` | Numeric deduction rate (e.g. `100` for flat or `15` for 15%). |
 | `min_fare_threshold`| `number` | Minimum booking grand total base required to qualify. |
 | `status` | `string` | State parameters (`"active"` or `"inactive"`). |
-| `creation_ts` | `Timestamp` | Promotion creation timestamp. |
+| `visible_to_customer`| `boolean` | Flag for visibility in customer promotions list. |
 
 ---
 
@@ -348,15 +379,12 @@ Global configurations used for dynamic system values.
 
 | Field Key | Data Type | Structure Map Description |
 | :--- | :--- | :--- |
-| `rates` | `Map (Object)` | Holds nested pricing matrices for vehicle tiers: `sedan`, `suv`, and `muv`. |
+| `local` | `Map (Object)` | Mappings of local ride base fare parameters. |
+| `rental` | `Map (Object)` | Mappings of hourly/distance packages rates. |
+| `intercity` | `Map (Object)` | Mappings of outstation kilometers and halt parameters. |
+| `global` | `Map (Object)` | Timing intervals (e.g., night charge windows) and tax metadata. |
 | `active_version_id`| `string` | Foreign Key referencing `/rates_history.id`. |
 | `updated_ts` | `Timestamp` | Setting update timestamp. |
-
-#### Nested Tier Rate Map Structure:
-*   `base_cost`: `number` (Base booking minimum charge).
-*   `rate_per_km`: `number` (Distance per-kilometer multiplier).
-*   `rate_per_hour`: `number` (Hourly duration multiplier for rentals).
-*   `driver_allowance_per_day`: `number` (Outstation operator daily halt allowance).
 
 ---
 
@@ -423,8 +451,8 @@ erDiagram
     offers {
         string id PK "Document ID (promo code string)"
         string code
-        string type
-        number value
+        string discount_type
+        number discount_value
         number min_fare_threshold
         string status
         timestamp creation_ts
@@ -432,21 +460,24 @@ erDiagram
     
     settings_rates {
         string id PK "Document ID ('rates')"
-        object rates "Map containing sedan, suv, muv parameters"
+        object local
+        object rental
+        object intercity
+        object global
         string active_version_id FK "References rates_history.id"
         timestamp updated_ts
     }
     
     rates_history {
         string id PK "Document ID (version string)"
-        object rates "Map containing sedan, suv, muv parameters"
+        object rates "Map containing parameters"
         timestamp creation_ts
     }
 
     users ||--o{ bookings : "submits"
     drivers |o--o| vehicles : "assigned bidirectionally (assigned_vehicle_id / assigned_driver_id)"
-    bookings }o--o| drivers : "allocated on approval (driver_assignment.driver_phone)"
-    bookings }o--o| vehicles : "allocated on approval (driver_assignment.vehicle_number)"
+    bookings }o--o| drivers : "allocated on approval (driver_assignment.driver_id)"
+    bookings }o--o| vehicles : "allocated on approval (driver_assignment.vehicle_id)"
     bookings }o--o| offers : "applies coupon (fare_details.promo_code)"
     bookings }o--o| rates_history : "calculated under configuration (fare_details.rates_version_id)"
     settings_rates }o--|| rates_history : "tracks active version (active_version_id)"

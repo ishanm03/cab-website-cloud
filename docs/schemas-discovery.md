@@ -1,40 +1,40 @@
 # Firestore Schemas & API Contract Discovery (Version 1.0)
 
-This document locks down the data schemas and payload structures for the 8 primary Firestore collections in the IshanCabs / SETHCABS database, standardizes the backend API response envelopes, and integrates the updated fare calculation logic.
+This document locks down the data schemas and payload structures for the 8 primary Firestore collections in the **SethCabs** database, standardizes the backend API response envelopes, and integrates the updated fare calculation logic.
 
 ---
 
 ## 1. Standard API Response Envelopes
 
-To decouple the client-side frontend from direct database formatting, all backend APIs must return a standardized JSON structure.
+To decouple the client-side frontend from direct database formatting, all backend APIs return a standardized JSON structure.
 
-### Success Envelope
+### Success Envelope (Standard Mutations & Actions)
 ```json
 {
-  "data": {
-    "key": "value"
-  },
-  "meta": {
-    "timestamp": "2026-07-25T04:20:00Z",
-    "version": "1.0"
-  }
+  "status": "success",
+  "booking_id": "BK-20260725-4928"
+}
+```
+
+### Profile Fetch Envelope (`GET /api/v1/me/profile`)
+```json
+{
+  "uid": "test_rider_uid",
+  "name": "Ishan Mukherjee",
+  "city": "Kolkata",
+  "phone": "9830098300",
+  "email": "rider@test.com",
+  "auth_provider": "password",
+  "status": "active",
+  "creation_ts": "2026-08-01T12:00:00",
+  "updated_ts": "2026-08-01T12:00:00"
 }
 ```
 
 ### Error Envelope
 ```json
 {
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "The provided inputs failed schema constraints.",
-    "details": [
-      {
-        "loc": ["body", "phone"],
-        "msg": "value is not a valid phone number",
-        "type": "value_error"
-      }
-    ]
-  }
+  "detail": "Failed to submit booking: Quote signature verification failed or signature expired."
 }
 ```
 
@@ -56,8 +56,8 @@ Represents the rider and administrative user profiles.
   | `email` | String | No | Valid email address. |
   | `auth_provider` | String | Yes | Provider string (e.g. "password", "google"). |
   | `status` | String | Yes | Profile status ("active", "suspended"). |
-  | `creation_ts` | Timestamp | Yes | Profile creation date/time. |
-  | `updated_ts` | Timestamp | Yes | Last modified date/time. |
+  | `creation_ts` | Timestamp / String | Yes | Profile creation date/time. |
+  | `updated_ts` | Timestamp / String | Yes | Last modified date/time. |
 
 ---
 
@@ -70,20 +70,25 @@ Represents cab booking requests, invoices, and assignments.
   | :--- | :--- | :---: | :--- |
   | `booking_id` | String | Yes | Date-based formatted booking ID. |
   | `customer_id` | String | Yes | Associated rider's `uid`. |
-  | `booking_channel` | String | Yes | Source of booking (e.g., "website", "mobile", "whatsapp", "admin"). |
+  | `customer_name` | String | Yes | User name snapshot copy for fast rendering. |
+  | `customer_phone` | String | Yes | User phone snapshot copy. |
+  | `booking_channel` | String | Yes | Source of booking (e.g., "website", "admin"). |
   | `status` | String | Yes | Lifecycle status ("pending_approval", "confirmed", "active", "completed", "cancelled", "rejected"). |
   | `payment_status` | String | Yes | Transaction state ("pending", "paid", "refunded"). |
   | `driver_assignment` | Object / Null | No | Driver details when allocated (see sub-schema below). |
   | `trip_details` | Object | Yes | Geo, schedule, and duration options (see sub-schema below). |
   | `fare_details` | Object | Yes | Cost breakdown and rates version identifier (see sub-schema below). |
-  | `creation_ts` | Timestamp | Yes | Booking registration timestamp. |
-  | `updated_ts` | Timestamp | Yes | Last status change timestamp. |
+  | `feedback` | Object / Null | No | Review comments and ratings submitted by customer (see sub-schema below). |
+  | `rejection_reason` | String / Null | No | Logged explanation when status is `"rejected"`. |
+  | `creation_ts` | Timestamp / String | Yes | Booking registration timestamp. |
+  | `updated_ts` | Timestamp / String | Yes | Last status change timestamp. |
 
 #### Sub-Schema: `driver_assignment`
 ```json
 {
   "driver_id": "918981538038",
   "driver_name": "Rajesh Kumar",
+  "driver_phone": "+918981538038",
   "vehicle_id": "WB02A1234",
   "vehicle_model": "Suzuki WagonR",
   "assigned_at": "2026-07-25T05:00:00Z"
@@ -100,8 +105,8 @@ Represents cab booking requests, invoices, and assignments.
   "pickup_time": "14:30",
   "outstation_days": null,
   "rental_hours": null,
-  "pickup_coords": { "lat": 22.5834, "lng": 88.3414 },
-  "drop_coords": { "lat": 22.6547, "lng": 88.4467 },
+  "pickup_coords": [22.5833, 88.3414],
+  "drop_coords": [22.6547, 88.4467],
   "route_polyline": "..."
 }
 ```
@@ -126,6 +131,15 @@ Represents cab booking requests, invoices, and assignments.
 }
 ```
 
+#### Sub-Schema: `feedback`
+```json
+{
+  "rating": 5,
+  "comments": "Excellent service and punctual driver!",
+  "submitted_ts": "2026-08-01T14:50:00Z"
+}
+```
+
 ---
 
 ### 2.3 Collection: `vehicles`
@@ -142,7 +156,7 @@ Represents the available fleet assets.
   | `assigned_driver_id` | String / Null | No | Phone number or ID of the linked driver. |
   | `passengers` | Number | Yes | Seat capacity (Compact/Premium: 4, SUV: 6, MUV: 12). |
   | `address` | String | Yes | Primary depot location. |
-  | `creation_ts` | Timestamp | Yes | Date/time registered. |
+  | `creation_ts` | Timestamp / String | Yes | Date/time registered. |
 
 ---
 
@@ -159,7 +173,7 @@ Represents the driver registry database.
   | `status` | String | Yes | Working state ("active", "inactive", "on_trip"). |
   | `assigned_vehicle_id` | String / Null | No | Plate number of the assigned vehicle asset. |
   | `address` | String | Yes | Driver local city depot assignment. |
-  | `creation_ts` | Timestamp | Yes | Registration timestamp. |
+  | `creation_ts` | Timestamp / String | Yes | Registration timestamp. |
 
 ---
 
@@ -186,52 +200,15 @@ Dynamic tariff specifications for the three core ride models (Local, Rental, Int
 * **Fields**:
   | Field | Type | Required | Description |
   | :--- | :--- | :---: | :--- |
-  | `local` | Object | Yes | Maps vehicle tier specific rates for local rides (see structure below). |
-  | `rental` | Object | Yes | Maps vehicle tier package targets for rentals (see structure below). |
-  | `intercity` | Object | Yes | Maps vehicle tier parameters for long distance trips (see structure below). |
-  | `global` | Object | Yes | Global timing and tax parameters (see structure below). |
+  | `rates` | Object | Yes | Nested pricing configuration per vehicle tier (compact, premium, suv, muv) matching specifications below. |
+  | `active_version_id` | String | Yes | Identifier reference linking to a document in `/rates_history`. |
+  | `updated_ts` | Timestamp / String | Yes | Setting update timestamp. |
 
-#### Sub-Schema: `local`
-Contains nested rates for each tier:
-```json
-{
-  "compact": { "base_fare": 550, "extra_km_rate": 12, "waiting_rate": 3, "night_charge": 200 },
-  "premium": { "base_fare": 650, "extra_km_rate": 13, "waiting_rate": 4, "night_charge": 300 },
-  "suv": { "base_fare": 750, "extra_km_rate": 14, "waiting_rate": 5, "night_charge": 400 },
-  "muv": { "base_fare": 850, "extra_km_rate": 15, "waiting_rate": 5, "night_charge": 500 }
-}
-```
-
-#### Sub-Schema: `rental`
-Contains nested hourly/distance packages for each tier:
-```json
-{
-  "compact": { "base_fare": 2300, "included_hours": 6, "included_km": 60, "extra_km_rate": 12, "extra_hour_rate": 180, "night_charge": 200, "default_discount": 500 },
-  "premium": { "base_fare": 2500, "included_hours": 6, "included_km": 60, "extra_km_rate": 13, "extra_hour_rate": 240, "night_charge": 300, "default_discount": 500 },
-  "suv": { "base_fare": 2800, "included_hours": 6, "included_km": 60, "extra_km_rate": 14, "extra_hour_rate": 300, "night_charge": 400, "default_discount": 500 },
-  "muv": { "base_fare": 3300, "included_hours": 6, "included_km": 60, "extra_km_rate": 16, "extra_hour_rate": 360, "night_charge": 500, "default_discount": 500 }
-}
-```
-
-#### Sub-Schema: `intercity`
-Contains nested intercity guidelines:
-```json
-{
-  "compact": { "rate_per_km": 12, "driver_allowance": 600, "min_km_per_day": 250, "night_halt": 500 },
-  "premium": { "rate_per_km": 14, "driver_allowance": 600, "min_km_per_day": 250, "night_halt": 500 },
-  "suv": { "rate_per_km": 18, "driver_allowance": 800, "min_km_per_day": 250, "night_halt": 500 },
-  "muv": { "rate_per_km": 22, "driver_allowance": 800, "min_km_per_day": 250, "night_halt": 500 }
-}
-```
-
-#### Sub-Schema: `global`
-```json
-{
-  "night_charge_start": "23:59",
-  "night_charge_end": "06:00",
-  "gst_percentage": 5.0
-}
-```
+#### Sub-Schema Matrix (Rates):
+* **Compact**: `{ "base_cost": 250, "rate_per_km": 10.00, "rate_per_hour": 120.00, "driver_allowance_per_day": 300.00 }`
+* **Premium**: `{ "base_cost": 300, "rate_per_km": 12.00, "rate_per_hour": 150.00, "driver_allowance_per_day": 300.00 }`
+* **SUV**: `{ "base_cost": 500, "rate_per_km": 15.00, "rate_per_hour": 200.00, "driver_allowance_per_day": 400.00 }`
+* **MUV**: `{ "base_cost": 700, "rate_per_km": 18.00, "rate_per_hour": 250.00, "driver_allowance_per_day": 500.00 }`
 
 ---
 
@@ -247,14 +224,14 @@ Represents geocoded landmark pins used for auto-routing.
   | `type` | String | Yes | Pin eligibility ("pickup", "drop", "both"). |
   | `lat` | Number | Yes | Latitude coordinates decimal. |
   | `lng` | Number | Yes | Longitude coordinates decimal. |
-  | `creation_ts` | Timestamp | Yes | Seeding or creation timestamp. |
+  | `creation_ts` | Timestamp / String | Yes | Seeding or creation timestamp. |
 
 ---
 
 ### 2.8 Collection: `flat_fares`
 Predefined pricing overrides for high-traffic routes.
 
-* **Document ID**: `pickupId_dropId` (e.g. `howrah_station_kolkata_airport`)
+* **Document ID**: `pickupId_dropId` (e.g. `howrah_station_airport`)
 * **Fields**:
   | Field | Type | Required | Description |
   | :--- | :--- | :---: | :--- |
@@ -262,14 +239,14 @@ Predefined pricing overrides for high-traffic routes.
   | `pickup_name` | String | Yes | Name of the origin landmark. |
   | `drop_name` | String | Yes | Name of the destination landmark. |
   | `fares` | Object | Yes | Price mappings per vehicle class (see structure below). |
-  | `creation_ts` | Timestamp | Yes | Document creation timestamp. |
+  | `creation_ts` | Timestamp / String | Yes | Document creation timestamp. |
 
 #### Sub-Schema: `fares`
 ```json
 {
-  "compact": 490,
-  "premium": 580,
-  "suv": 850,
-  "muv": 1100
+  "compact": 850,
+  "premium": 999,
+  "suv": 1499,
+  "muv": 1875
 }
 ```
