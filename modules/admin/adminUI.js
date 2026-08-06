@@ -25,6 +25,32 @@ window.addEventListener("error", (e) => {
     console.error("Diagnostic Alert - JS Error: ", e.message, "File: ", e.filename, "Line: ", e.lineno);
 });
 
+const API_BASE = window.location.origin.includes("localhost") || window.location.origin.includes("127.0.0.1") 
+    ? "http://localhost:8000/api/v1" 
+    : "/api/v1";
+
+async function adminApiCall(endpoint, method = "GET", body = null) {
+    const headers = { "Content-Type": "application/json" };
+    if (auth && auth.currentUser) {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            headers["Authorization"] = `Bearer ${token}`;
+        } catch (err) {
+            console.error("adminApiCall: Failed to get token:", err);
+        }
+    }
+    const options = { method, headers };
+    if (body) {
+        options.body = JSON.stringify(body);
+    }
+    const response = await fetch(`${API_BASE}${endpoint}`, options);
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || err.error?.message || `HTTP error ${response.status}`);
+    }
+    return await response.json().catch(() => ({}));
+}
+
 // DOM Selector Handles
 const adminWelcome = document.getElementById("admin-welcome");
 const btnAdminLogout = document.getElementById("btn-admin-logout");
@@ -792,14 +818,12 @@ function bindCardActionButtonEvents() {
             if (confirmComplete) {
                 utils.showAlert(adminAlert, "Updating booking status...", "success");
                 try {
-                    const bookingDocRef = doc(db, "bookings", bookingId);
-                    await updateDoc(bookingDocRef, {
-                        status: "completed",
-                        updated_ts: serverTimestamp()
+                    await adminApiCall(`/admin/bookings/${bookingId}`, "PATCH", {
+                        status: "completed"
                     });
                     utils.showAlert(adminAlert, `Booking ${bookingId} marked completed successfully!`, "success");
                 } catch (error) {
-                    console.error("IshanCabs: Failed to complete ride", error);
+                    console.error("SethCabs: Failed to complete ride", error);
                     utils.showAlert(adminAlert, "Status update failed: " + error.message);
                 }
             }
@@ -815,14 +839,12 @@ function bindCardActionButtonEvents() {
             if (confirmStart) {
                 utils.showAlert(adminAlert, "Starting ride...", "success");
                 try {
-                    const bookingDocRef = doc(db, "bookings", bookingId);
-                    await updateDoc(bookingDocRef, {
-                        status: "active",
-                        updated_ts: serverTimestamp()
+                    await adminApiCall(`/admin/bookings/${bookingId}`, "PATCH", {
+                        status: "active"
                     });
                     utils.showAlert(adminAlert, `Ride ${bookingId} has started!`, "success");
                 } catch (error) {
-                    console.error("IshanCabs: Failed to start ride", error);
+                    console.error("SethCabs: Failed to start ride", error);
                     utils.showAlert(adminAlert, "Status update failed: " + error.message);
                 }
             }
@@ -1010,12 +1032,11 @@ async function handleApprovalFormSubmit(e) {
             }
         }
 
-        const bookingDocRef = doc(db, "bookings", bookingId);
-        await updateDoc(bookingDocRef, updatePayload);
+        await adminApiCall(`/admin/bookings/${bookingId}`, "PATCH", updatePayload);
 
         utils.showAlert(adminAlert, `Booking ${bookingId} approved and driver assigned successfully!`, "success");
     } catch (error) {
-        console.error("IshanCabs: Failed to approve ride", error);
+        console.error("SethCabs: Failed to approve ride", error);
         utils.showAlert(adminAlert, "Approval transaction failed: " + error.message);
     }
 }
@@ -1035,16 +1056,14 @@ async function handleRejectionFormSubmit(e) {
     utils.showAlert(adminAlert, "Rejecting booking request...", "success");
 
     try {
-        const bookingDocRef = doc(db, "bookings", bookingId);
-        await updateDoc(bookingDocRef, {
+        await adminApiCall(`/admin/bookings/${bookingId}`, "PATCH", {
             status: "rejected",
-            rejection_reason: reason,
-            updated_ts: serverTimestamp()
+            rejection_reason: reason
         });
 
         utils.showAlert(adminAlert, `Booking ${bookingId} rejected successfully.`, "success");
     } catch (error) {
-        console.error("IshanCabs: Failed to reject ride", error);
+        console.error("SethCabs: Failed to reject ride", error);
         utils.showAlert(adminAlert, "Rejection transaction failed: " + error.message);
     }
 }
@@ -1300,22 +1319,7 @@ async function handleFaresFormSubmit(e) {
     };
 
     try {
-        const versionId = "R-" + Date.now();
-
-        // 1. Write the new version to rates_history collection
-        const historyDocRef = doc(db, "rates_history", versionId);
-        await setDoc(historyDocRef, {
-            rates: newRates,
-            creation_ts: serverTimestamp()
-        });
-
-        // 2. Update settings/rates with active version ID
-        const ratesDocRef = doc(db, "settings", "rates");
-        await setDoc(ratesDocRef, {
-            rates: newRates,
-            active_version_id: versionId,
-            updated_ts: serverTimestamp()
-        });
+        await adminApiCall("/admin/settings/rates", "PUT", { rates: newRates });
 
         utils.showAlert(adminAlert, "Fare matrix saved and history version logged successfully!", "success");
     } catch (err) {
@@ -1392,8 +1396,7 @@ function bindPromoActions() {
 
             utils.showAlert(adminAlert, `Toggling status of promo ${code}...`, "success");
             try {
-                const offerRef = doc(db, "offers", code);
-                await updateDoc(offerRef, { status: nextStatus });
+                await adminApiCall(`/admin/offers/${code}`, "PUT", { status: nextStatus });
                 utils.showAlert(adminAlert, `Promo code ${code} status modified to ${nextStatus.toUpperCase()}!`, "success");
                 loadPromoOffers();
             } catch (err) {
@@ -1409,8 +1412,7 @@ function bindPromoActions() {
             if (confirm(`Are you sure you want to permanently delete promo coupon: ${code}?`)) {
                 utils.showAlert(adminAlert, `Deleting promo code ${code}...`, "success");
                 try {
-                    const offerRef = doc(db, "offers", code);
-                    await deleteDoc(offerRef);
+                    await adminApiCall(`/admin/offers/${code}`, "DELETE");
                     utils.showAlert(adminAlert, `Promo code ${code} deleted successfully.`, "success");
                     loadPromoOffers();
                 } catch (err) {
@@ -1424,7 +1426,6 @@ function bindPromoActions() {
 
 async function handlePromoFormSubmit(e) {
     e.preventDefault();
-    if (!db) return;
 
     const code = promoCodeInput.value.trim().toUpperCase();
     const discountType = promoTypeSelect.value;
@@ -1439,8 +1440,7 @@ async function handlePromoFormSubmit(e) {
 
     utils.showAlert(adminAlert, `Creating new promo offer ${code}...`, "success");
     try {
-        const offerRef = doc(db, "offers", code);
-        await setDoc(offerRef, {
+        await adminApiCall("/admin/offers", "POST", {
             code: code,
             discount_type: discountType,
             discount_value: discountValue,
@@ -1701,21 +1701,21 @@ async function handleVehicleFormSubmit(e) {
         }
 
         if (editId && editId !== standardizedId) {
-            await deleteDoc(doc(db, "vehicles", editId));
+            await adminApiCall(`/admin/vehicles/${editId}`, "DELETE");
         }
 
         const vehiclePayload = {
+            id: standardizedId,
             model: modelVal,
             plate_number: plateVal,
             tier: tierVal,
             passengers: passengersVal,
             address: addressVal,
             status: statusVal,
-            assigned_driver_id: driverIdVal || null,
-            creation_ts: serverTimestamp()
+            assigned_driver_id: driverIdVal || null
         };
 
-        await setDoc(vehicleDocRef, vehiclePayload);
+        await adminApiCall(`/admin/vehicles/${standardizedId}`, "PUT", vehiclePayload);
 
         // Link driver bidirectionally
         if (driverIdVal) {
@@ -1726,12 +1726,12 @@ async function handleVehicleFormSubmit(e) {
                 const previousAssignedVehicleId = driverData.assigned_vehicle_id;
                 
                 if (previousAssignedVehicleId && previousAssignedVehicleId !== standardizedId) {
-                    await updateDoc(doc(db, "vehicles", previousAssignedVehicleId), {
+                    await adminApiCall(`/admin/vehicles/${previousAssignedVehicleId}`, "PUT", {
                         assigned_driver_id: null
                     });
                 }
             }
-            await updateDoc(driverDocRef, {
+            await adminApiCall(`/admin/drivers/${driverIdVal}`, "PUT", {
                 assigned_vehicle_id: standardizedId
             });
         } else {
@@ -1739,7 +1739,7 @@ async function handleVehicleFormSubmit(e) {
             if (editId) {
                 const prevVeh = vehiclesData.find(v => v.id === editId);
                 if (prevVeh && prevVeh.assigned_driver_id) {
-                    await updateDoc(doc(db, "drivers", prevVeh.assigned_driver_id), {
+                    await adminApiCall(`/admin/drivers/${prevVeh.assigned_driver_id}`, "PUT", {
                         assigned_vehicle_id: null
                     });
                 }
@@ -1750,7 +1750,7 @@ async function handleVehicleFormSubmit(e) {
         if (editId && driverIdVal) {
             const prevVehDoc = vehiclesData.find(v => v.id === editId);
             if (prevVehDoc && prevVehDoc.assigned_driver_id && prevVehDoc.assigned_driver_id !== driverIdVal) {
-                await updateDoc(doc(db, "drivers", prevVehDoc.assigned_driver_id), {
+                await adminApiCall(`/admin/drivers/${prevVehDoc.assigned_driver_id}`, "PUT", {
                     assigned_vehicle_id: null
                 });
             }
@@ -1792,20 +1792,20 @@ async function handleDriverFormSubmit(e) {
         }
 
         if (editId && editId !== standardizedId) {
-            await deleteDoc(doc(db, "drivers", editId));
+            await adminApiCall(`/admin/drivers/${editId}`, "DELETE");
         }
 
         const driverPayload = {
+            id: standardizedId,
             name: nameVal,
             address: addressVal,
             phone: phoneVal,
             license_number: licenseVal,
             status: statusVal,
-            assigned_vehicle_id: vehicleIdVal || null,
-            creation_ts: serverTimestamp()
+            assigned_vehicle_id: vehicleIdVal || null
         };
 
-        await setDoc(driverDocRef, driverPayload);
+        await adminApiCall(`/admin/drivers/${standardizedId}`, "PUT", driverPayload);
 
         // Link vehicle bidirectionally
         if (vehicleIdVal) {
@@ -1816,19 +1816,19 @@ async function handleDriverFormSubmit(e) {
                 const previousAssignedDriverId = vehData.assigned_driver_id;
                 
                 if (previousAssignedDriverId && previousAssignedDriverId !== standardizedId) {
-                    await updateDoc(doc(db, "drivers", previousAssignedDriverId), {
+                    await adminApiCall(`/admin/drivers/${previousAssignedDriverId}`, "PUT", {
                         assigned_vehicle_id: null
                     });
                 }
             }
-            await updateDoc(vehDocRef, {
+            await adminApiCall(`/admin/vehicles/${vehicleIdVal}`, "PUT", {
                 assigned_driver_id: standardizedId
             });
         } else {
             if (editId) {
                 const prevDrv = driversData.find(d => d.id === editId);
                 if (prevDrv && prevDrv.assigned_vehicle_id) {
-                    await updateDoc(doc(db, "vehicles", prevDrv.assigned_vehicle_id), {
+                    await adminApiCall(`/admin/vehicles/${prevDrv.assigned_vehicle_id}`, "PUT", {
                         assigned_driver_id: null
                     });
                 }
@@ -1839,7 +1839,7 @@ async function handleDriverFormSubmit(e) {
         if (editId && vehicleIdVal) {
             const prevDriverDoc = driversData.find(d => d.id === editId);
             if (prevDriverDoc && prevDriverDoc.assigned_vehicle_id && prevDriverDoc.assigned_vehicle_id !== vehicleIdVal) {
-                await updateDoc(doc(db, "vehicles", prevDriverDoc.assigned_vehicle_id), {
+                await adminApiCall(`/admin/vehicles/${prevDriverDoc.assigned_vehicle_id}`, "PUT", {
                     assigned_driver_id: null
                 });
             }
@@ -1883,18 +1883,18 @@ function bindFleetActionButtons() {
         btn.addEventListener("click", async () => {
             const id = btn.getAttribute("data-id");
             const confirmDelete = confirm(`Are you sure you want to delete vehicle ${id}?`);
-            if (confirmDelete && db) {
+            if (confirmDelete) {
                 try {
                     utils.showAlert(adminAlert, "Deleting vehicle...", "success");
                     
                     const vehicleObj = vehiclesData.find(v => v.id === id);
                     if (vehicleObj && vehicleObj.assigned_driver_id) {
-                        await updateDoc(doc(db, "drivers", vehicleObj.assigned_driver_id), {
+                        await adminApiCall(`/admin/drivers/${vehicleObj.assigned_driver_id}`, "PUT", {
                             assigned_vehicle_id: null
                         });
                     }
                     
-                    await deleteDoc(doc(db, "vehicles", id));
+                    await adminApiCall(`/admin/vehicles/${id}`, "DELETE");
                     utils.showAlert(adminAlert, "Vehicle deleted successfully!", "success");
                 } catch (e) {
                     console.error(e);
@@ -1934,18 +1934,18 @@ function bindDriverActionButtons() {
         btn.addEventListener("click", async () => {
             const id = btn.getAttribute("data-id");
             const confirmDelete = confirm(`Are you sure you want to delete driver ${id}?`);
-            if (confirmDelete && db) {
+            if (confirmDelete) {
                 try {
                     utils.showAlert(adminAlert, "Deleting driver...", "success");
                     
                     const driverObj = driversData.find(d => d.id === id);
                     if (driverObj && driverObj.assigned_vehicle_id) {
-                        await updateDoc(doc(db, "vehicles", driverObj.assigned_vehicle_id), {
+                        await adminApiCall(`/admin/vehicles/${driverObj.assigned_vehicle_id}`, "PUT", {
                             assigned_driver_id: null
                         });
                     }
 
-                    await deleteDoc(doc(db, "drivers", id));
+                    await adminApiCall(`/admin/drivers/${id}`, "DELETE");
                     utils.showAlert(adminAlert, "Driver deleted successfully!", "success");
                 } catch (e) {
                     console.error(e);
@@ -1986,60 +1986,14 @@ function resetDriverForm() {
 }
 
 async function seedDefaultFleet() {
-    if (!db) return;
     utils.showAlert(adminAlert, "Seeding default fleet data into database...", "success");
     try {
         const response = await fetch("../booking/dummyFleet.json");
         if (!response.ok) throw new Error("Failed to load dummyFleet.json");
         const dummyData = await response.json();
 
-        const modelMapping = {
-            compact: "Maruti Alto K10",
-            premium: "Maruti Swift Dzire",
-            suv: "Hyundai Creta",
-            muv: "Toyota Innova"
-        };
-
-        let count = 0;
-        for (const tier of Object.keys(dummyData)) {
-            const driversList = dummyData[tier];
-            for (const item of driversList) {
-                const vehiclePlateClean = item.vehicle_number.toUpperCase().trim();
-                const vehicleId = vehiclePlateClean.replace(/[^A-Z0-9]/g, ""); 
-                
-                const driverPhoneClean = item.driver_phone.trim();
-                const driverId = driverPhoneClean.replace(/[^0-9]/g, ""); 
-                
-                const randomLicenseNum = "DL-" + Math.floor(1000000000 + Math.random() * 9000000000);
-
-                const vehRef = doc(db, "vehicles", vehicleId);
-                await setDoc(vehRef, {
-                    model: modelMapping[tier] || "Fleet Car",
-                    plate_number: vehiclePlateClean,
-                    tier: tier,
-                    status: "active",
-                    assigned_driver_id: driverId,
-                    passengers: tier === "compact" ? 4 : (tier === "premium" ? 4 : (tier === "suv" ? 6 : 12)),
-                    address: "Main Garage, Kolkata",
-                    creation_ts: serverTimestamp()
-                });
-
-                const drvRef = doc(db, "drivers", driverId);
-                await setDoc(drvRef, {
-                    name: item.driver_name,
-                    phone: driverPhoneClean,
-                    license_number: randomLicenseNum,
-                    status: "active",
-                    assigned_vehicle_id: vehicleId,
-                    address: "Kolkata City Depot",
-                    creation_ts: serverTimestamp()
-                });
-
-                count++;
-            }
-        }
-
-        utils.showAlert(adminAlert, `Successfully seeded ${count} drivers and vehicles into Firestore!`, "success");
+        const res = await adminApiCall("/admin/seed-fleet", "POST", dummyData);
+        utils.showAlert(adminAlert, `Successfully seeded ${res.count} drivers and vehicles into Firestore!`, "success");
     } catch (err) {
         console.error("Seeding failed:", err);
         utils.showAlert(adminAlert, "Seeding inventory failed: " + err.message);
@@ -2292,13 +2246,12 @@ async function handleAddLocationSubmit(e) {
     utils.showAlert(adminAlert, "Saving predefined location...", "success");
 
     try {
-        await setDoc(doc(db, "locations", locId), {
+        await adminApiCall("/admin/locations", "POST", {
             id: locId,
             name: name,
             type: type,
             lat: lat,
-            lng: lng,
-            creation_ts: serverTimestamp()
+            lng: lng
         });
 
         utils.showAlert(adminAlert, `Successfully saved predefined location: ${name}!`, "success");
@@ -2345,7 +2298,7 @@ async function handleFlatFareSubmit(e) {
     utils.showAlert(adminAlert, "Saving flat fare override...", "success");
 
     try {
-        await setDoc(doc(db, "flat_fares", combinedId), {
+        await adminApiCall("/admin/flat-fares", "POST", {
             id: combinedId,
             pickup_name: pickupName,
             drop_name: dropName,
@@ -2354,8 +2307,7 @@ async function handleFlatFareSubmit(e) {
                 premium: premiumVal,
                 suv: suvVal,
                 muv: muvVal
-            },
-            creation_ts: serverTimestamp()
+            }
         });
 
         utils.showAlert(adminAlert, `Flat fare override configured for route: ${pickupName} to ${dropName}!`, "success");
@@ -2426,7 +2378,7 @@ function loadLocationsList() {
                 if (confirm("Are you sure you want to delete this predefined location? This will disable matching routes and flat fares.")) {
                     utils.showAlert(adminAlert, "Deleting location...", "success");
                     try {
-                        await deleteDoc(doc(db, "locations", id));
+                        await adminApiCall(`/admin/locations/${id}`, "DELETE");
                         utils.showAlert(adminAlert, "Location deleted successfully.", "success");
                     } catch (error) {
                         utils.showAlert(adminAlert, "Delete failed: " + error.message);
@@ -2477,7 +2429,7 @@ function loadFlatFaresList() {
                 if (confirm("Are you sure you want to delete this flat fare override? Driving calculations will fallback OSRM distance pricing.")) {
                     utils.showAlert(adminAlert, "Deleting override...", "success");
                     try {
-                        await deleteDoc(doc(db, "flat_fares", id));
+                        await adminApiCall(`/admin/flat-fares/${id}`, "DELETE");
                         utils.showAlert(adminAlert, "Flat fare override deleted successfully.", "success");
                     } catch (error) {
                         utils.showAlert(adminAlert, "Delete failed: " + error.message);
@@ -3468,8 +3420,10 @@ async function handleAdminBookingFormSubmit(e) {
     utils.showAlert(adminAlert, "Creating manual booking...", "success");
     
     try {
-        if (!db) throw new Error("Firestore not initialized.");
-        await setDoc(doc(db, "bookings", bookingId), bookingPayload);
+        // Strip serverTimestamp values as backend automatically handles them
+        delete bookingPayload.creation_ts;
+        delete bookingPayload.updated_ts;
+        await adminApiCall("/admin/bookings/manual", "POST", bookingPayload);
         
         utils.showAlert(adminAlert, `Booking ${bookingId} created successfully!`, "success");
         
