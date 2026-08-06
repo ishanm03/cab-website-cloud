@@ -323,16 +323,16 @@ $$\text{Local Fare} = \text{Base Cost} + \max(0, d - 10) \times R_{\text{km}} + 
 
 #### Night Charge Condition
 A night-charge multiplier is added if the pickup time string ($t$) falls within the night time window:
-$$t \ge \text{night\_charge\_start (23:59)} \quad \text{or} \quad t \le \text{night\_charge\_end (06:00)}$$
+$$t \ge \text{night charge start (23:59)} \quad \text{or} \quad t \le \text{night charge end (06:00)}$$
 
 ---
 
 ### 6.3 Anti-Replay Signed Quotes
 To prevent clients from submitting tampered fares (e.g. editing HTML values during checkout), quotes are cryptographically signed on the server:
 1. **Hashing (SHA-256)**: The server constructs a serialized message string:
-   $$\text{Message} = \text{quote\_id} \mid \text{customer\_id} \mid \text{vehicle\_tier} \mid \text{base\_fare} \mid \text{estimated\_fare} \mid \text{expires\_at}$$
+   $$\text{Message} = \text{quote ID} \mid \text{customer ID} \mid \text{vehicle tier} \mid \text{base fare} \mid \text{estimated fare} \mid \text{expires at}$$
 2. **Signature Generating**: The server hashes this message using a secret key:
-   $$\text{Signature} = \text{HMAC-SHA256}(\text{HMAC\_QUOTE\_SECRET}, \text{Message})$$
+   $$\text{Signature} = \text{HMAC-SHA256}(\text{HMAC-QUOTE-SECRET}, \text{Message})$$
 3. **Nonce Check (Anti-Replay)**: When a booking is submitted via `POST /bookings`, the server checks:
    * If current time is less than `expires_at`.
    * If the signature matches the parameters.
