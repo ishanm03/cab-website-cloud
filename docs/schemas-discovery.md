@@ -200,15 +200,33 @@ Dynamic tariff specifications for the three core ride models (Local, Rental, Int
 * **Fields**:
   | Field | Type | Required | Description |
   | :--- | :--- | :---: | :--- |
-  | `rates` | Object | Yes | Nested pricing configuration per vehicle tier (compact, premium, suv, muv) matching specifications below. |
+  | `rates` | Object | Yes | Nested pricing configuration per category (local, rental, intercity, global) matching specifications below. |
   | `active_version_id` | String | Yes | Identifier reference linking to a document in `/rates_history`. |
   | `updated_ts` | Timestamp / String | Yes | Setting update timestamp. |
 
-#### Sub-Schema Matrix (Rates):
-* **Compact**: `{ "base_cost": 250, "rate_per_km": 10.00, "rate_per_hour": 120.00, "driver_allowance_per_day": 300.00 }`
-* **Premium**: `{ "base_cost": 300, "rate_per_km": 12.00, "rate_per_hour": 150.00, "driver_allowance_per_day": 300.00 }`
-* **SUV**: `{ "base_cost": 500, "rate_per_km": 15.00, "rate_per_hour": 200.00, "driver_allowance_per_day": 400.00 }`
-* **MUV**: `{ "base_cost": 700, "rate_per_km": 18.00, "rate_per_hour": 250.00, "driver_allowance_per_day": 500.00 }`
+#### Sub-Schema Matrix (`rates` Object):
+
+##### 1. `rates.local` (Local pricing parameters per vehicle class)
+* **compact**: `{ "base_fare": 550.0, "extra_km_rate": 12.0, "waiting_rate": 3.0, "night_charge": 200.0 }`
+* **premium**: `{ "base_fare": 650.0, "extra_km_rate": 13.0, "waiting_rate": 4.0, "night_charge": 300.0 }`
+* **suv**: `{ "base_fare": 750.0, "extra_km_rate": 14.0, "waiting_rate": 5.0, "night_charge": 400.0 }`
+* **muv**: `{ "base_fare": 850.0, "extra_km_rate": 15.0, "waiting_rate": 5.0, "night_charge": 500.0 }`
+
+##### 2. `rates.rental` (Hourly rental package configurations per vehicle class)
+* **compact**: `{ "base_fare": 2300.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 12.0, "extra_hour_rate": 180.0, "night_charge": 200.0, "default_discount": 500.0 }`
+* **premium**: `{ "base_fare": 2500.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 13.0, "extra_hour_rate": 240.0, "night_charge": 300.0, "default_discount": 500.0 }`
+* **suv**: `{ "base_fare": 2800.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 14.0, "extra_hour_rate": 300.0, "night_charge": 400.0, "default_discount": 500.0 }`
+* **muv**: `{ "base_fare": 3300.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 16.0, "extra_hour_rate": 360.0, "night_charge": 500.0, "default_discount": 500.0 }`
+
+##### 3. `rates.intercity` (Outstation/Intercity parameters per vehicle class)
+* **compact**: `{ "rate_per_km": 12.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 }`
+* **premium**: `{ "rate_per_km": 14.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 }`
+* **suv**: `{ "rate_per_km": 18.0, "driver_allowance": 800.0, "min_km_per_day": 250.0, "night_halt": 500.0 }`
+* **muv**: `{ "rate_per_km": 22.0, "driver_allowance": 800.0, "min_km_per_day": 250.0, "night_halt": 500.0 }`
+
+##### 4. `rates.global` (Global system-wide config thresholds)
+* **night_charge_start**: `"23:59"` (Night charge timing window start)
+* **night_charge_end**: `"06:00"` (Night charge timing window end)
 
 ---
 

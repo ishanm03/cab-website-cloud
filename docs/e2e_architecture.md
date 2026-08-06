@@ -379,12 +379,15 @@ Global configurations used for dynamic system values.
 
 | Field Key | Data Type | Structure Map Description |
 | :--- | :--- | :--- |
-| `local` | `Map (Object)` | Mappings of local ride base fare parameters. |
-| `rental` | `Map (Object)` | Mappings of hourly/distance packages rates. |
-| `intercity` | `Map (Object)` | Mappings of outstation kilometers and halt parameters. |
-| `global` | `Map (Object)` | Timing intervals (e.g., night charge windows) and tax metadata. |
+| `rates` | `Map (Object)` | Holds nested pricing matrices for local, rental, intercity, and global configurations (detailed below). |
 | `active_version_id`| `string` | Foreign Key referencing `/rates_history.id`. |
 | `updated_ts` | `Timestamp` | Setting update timestamp. |
+
+#### `rates` Map Structure:
+*   `local`: `Map` (Mappings of local ride parameters per vehicle tier).
+*   `rental`: `Map` (Mappings of hourly/distance packages per vehicle tier).
+*   `intercity`: `Map` (Mappings of outstation kilometers and halt parameters per vehicle tier).
+*   `global`: `Map` (Timing intervals e.g. night charge windows).
 
 ---
 

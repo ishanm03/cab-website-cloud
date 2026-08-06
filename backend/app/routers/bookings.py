@@ -85,7 +85,7 @@ def calculate_fare(
     actual_hours = max(1, hours or 1)
     
     # Resolve rate database configs
-    rates_db = active_rates if active_rates else FALLBACK_RATES
+    rates_db = active_rates.get("rates", active_rates) if active_rates else FALLBACK_RATES
     global_cfg = rates_db.get("global", FALLBACK_RATES["global"])
     night_start = global_cfg.get("night_charge_start", "23:59")
     night_end = global_cfg.get("night_charge_end", "06:00")
