@@ -6,6 +6,7 @@ from google.cloud.firestore import SERVER_TIMESTAMP
 
 from app.core.firebase import db
 from app.core.auth import require_admin, AuthenticatedUser
+from app.schemas.pydantic_models import DbCleanupRequest
 
 router = APIRouter(
     prefix="/admin",
@@ -518,3 +519,73 @@ async def sync_schemas(current_user: AuthenticatedUser = Depends(require_admin))
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/db/cleanup")
+async def db_cleanup(
+    request: DbCleanupRequest,
+    current_user: AuthenticatedUser = Depends(require_admin)
+):
+    """
+    Delete either all documents in a collection or selected documents by ID.
+    """
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database offline."
+        )
+        
+    collection_name = request.collection_name.strip()
+    if not collection_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Collection name cannot be empty."
+        )
+
+    try:
+        deleted_count = 0
+        batch = db.batch()
+        
+        # Scenario A: Delete selected document IDs
+        if request.document_ids is not None and len(request.document_ids) > 0:
+            for doc_id in request.document_ids:
+                doc_ref = db.collection(collection_name).document(doc_id)
+                batch.delete(doc_ref)
+                deleted_count += 1
+                if deleted_count % 500 == 0:
+                    batch.commit()
+                    batch = db.batch()
+            if deleted_count % 500 != 0:
+                batch.commit()
+                
+        # Scenario B: Delete ALL documents in collection
+        else:
+            if not request.confirm_delete_all:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Confirm delete all flag must be set to true to clear the entire collection."
+                )
+            
+            # Retrieve all documents in collection
+            docs = db.collection(collection_name).stream()
+            for doc_snap in docs:
+                batch.delete(doc_snap.reference)
+                deleted_count += 1
+                if deleted_count % 500 == 0:
+                    batch.commit()
+                    batch = db.batch()
+            if deleted_count % 500 != 0:
+                batch.commit()
+                
+        return {
+            "status": "success",
+            "collection_name": collection_name,
+            "deleted_count": deleted_count
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database cleanup failed: {str(e)}"
+        )
+

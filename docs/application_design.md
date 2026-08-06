@@ -372,6 +372,14 @@ When an administrator assigns a driver to a vehicle (or vehicle to a driver), th
   2. Clear references from any linked entities (unlink driver/car).
   3. Delete document from collection path `/vehicles/{id}` or `/drivers/{id}`.
 
+#### 4. DELETE /api/v1/admin/db/cleanup
+* *Process*: Deletes selected documents by ID or cleans up the entire collection under a safety verification flag.
+* *Query steps*:
+  1. If `document_ids` is provided, initialize a Firestore batch and schedule deletion of specified document paths. Commit batch changes (max 500 documents per batch).
+  2. If `document_ids` is not provided (or empty), check if `confirm_delete_all` is `True`. If `False`, reject request with HTTP 400.
+  3. If `confirm_delete_all` is `True`, query the collection stream, queue references to a Firestore delete batch, and commit in 500-operation intervals.
+
+
 ---
 
 ## 7. ⚙️ Configuration Management

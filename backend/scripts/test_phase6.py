@@ -153,6 +153,40 @@ def run_tests():
             assert response.json()["status"] == "success"
             print("✓ Schema sync operations validated successfully!")
 
+            # Test 11: DELETE /db/cleanup
+            print("Test 11: DELETE /api/v1/admin/db/cleanup...")
+            # Test Scenario A: Partial delete by ID
+            partial_payload = {
+                "collection_name": "bookings",
+                "document_ids": ["BK-TEST-1", "BK-TEST-2"]
+            }
+            response = client.request("DELETE", "/api/v1/admin/db/cleanup", json=partial_payload, headers=admin_headers)
+            assert response.status_code == 200
+            assert response.json()["deleted_count"] == 2
+            print("✓ Partial document deletions validated successfully!")
+
+            # Test Scenario B: Deleting all without confirmation (should fail)
+            fail_payload = {
+                "collection_name": "bookings",
+                "confirm_delete_all": False
+            }
+            response = client.request("DELETE", "/api/v1/admin/db/cleanup", json=fail_payload, headers=admin_headers)
+            assert response.status_code == 400
+            print("✓ Safety confirmation prompt validator works correctly!")
+
+            # Test Scenario C: Delete all with confirmation
+            success_payload = {
+                "collection_name": "bookings",
+                "confirm_delete_all": True
+            }
+            mock_doc1 = MagicMock()
+            mock_doc2 = MagicMock()
+            mock_db.collection.return_value.stream.return_value = [mock_doc1, mock_doc2]
+            response = client.request("DELETE", "/api/v1/admin/db/cleanup", json=success_payload, headers=admin_headers)
+            assert response.status_code == 200
+            assert response.json()["deleted_count"] == 2
+            print("✓ Full collection deletions validated successfully!")
+
     print("\n✓✓✓ All Phase 6 Admin Operations Integration Tests Passed! ✓✓✓")
 
 if __name__ == "__main__":

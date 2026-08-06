@@ -211,6 +211,60 @@ For each test case request in Insomnia:
 
 ---
 
+### Test Case 1.6: Database Cleanup Operations (Admin only)
+* **Endpoint**: `DELETE http://127.0.0.1:8000/api/v1/admin/db/cleanup`
+
+#### Scenario A: Delete Specific Document IDs
+* **Request Body**:
+  ```json
+  {
+    "collection_name": "bookings",
+    "document_ids": ["BK-20260810-XXXX", "BK-20260810-YYYY"]
+  }
+  ```
+* **Expected Success (HTTP 200)**:
+  ```json
+  {
+    "status": "success",
+    "collection_name": "bookings",
+    "deleted_count": 2
+  }
+  ```
+
+#### Scenario B: Clear Entire Collection (with Safety Flag)
+* **Request Body**:
+  ```json
+  {
+    "collection_name": "bookings",
+    "confirm_delete_all": true
+  }
+  ```
+* **Expected Success (HTTP 200)**:
+  ```json
+  {
+    "status": "success",
+    "collection_name": "bookings",
+    "deleted_count": 48
+  }
+  ```
+
+#### Scenario C: Clear Entire Collection (Accidental without Safety Flag)
+* **Request Body**:
+  ```json
+  {
+    "collection_name": "bookings",
+    "confirm_delete_all": false
+  }
+  ```
+* **Expected Failure (HTTP 400)**:
+  ```json
+  {
+    "detail": "Confirm delete all flag must be set to true to clear the entire collection."
+  }
+  ```
+
+---
+
 ## 💻 Part 2: Frontend UI manual verification
 
 ### Test Case 2.1: Booking Step 1 Validation
