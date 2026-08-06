@@ -34,10 +34,35 @@ Press `Ctrl+C` inside each terminal window to shut down the respective servers.
 
 All backend requests require an active Firebase ID Token as a bearer authorization header unless noted otherwise.
 
-### Setup Headers
-* **Key**: `Authorization`
-* **Value**: `Bearer <FIREBASE_ID_TOKEN>` (obtained from the browser console via `await firebase.auth().currentUser.getIdToken()`).
-* **Content-Type**: `application/json`
+### Setup & Credentials Configuration
+
+#### 1. Retrieve the Firebase ID Token
+Open the website in your browser (`http://localhost:5500`), log in, open the browser's developer console (F12), and run:
+```javascript
+// Copy the returned token to your clipboard
+await auth.currentUser.getIdToken();
+```
+
+#### 2. Configure Insomnia Environment
+1. Launch **Insomnia**.
+2. Create a new **Design Document** or **Request Collection** named `SethCabs Local Testing`.
+3. Click the **Environment** dropdown menu in the upper-left corner (typically named `Base Environment` or `Manage Environments` (Cmd+E)).
+4. Paste the following JSON configuration:
+   ```json
+   {
+     "base_url": "http://127.0.0.1:8000/api/v1",
+     "firebase_token": "PASTE_YOUR_COPIED_TOKEN_HERE"
+   }
+   ```
+5. Click **Done**.
+
+#### 3. Setup Request Authorization & Headers
+For each test case request in Insomnia:
+1. Set the URL using the environment variable: `{{ _.base_url }}/me/profile`
+2. Select the **Auth** tab located directly below the request URL input bar.
+3. Select **Bearer Token** from the dropdown menu.
+4. Input the environment variable in the **Token** field: `{{ _.firebase_token }}` (Insomnia will autocomplete this when you type `{{`).
+5. Under the **Header** tab, confirm that `Content-Type` is set to `application/json`.
 
 ---
 
