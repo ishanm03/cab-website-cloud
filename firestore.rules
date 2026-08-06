@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Public Catalogs: Anyone can read pricing and location metadata
+    match /settings/rates { 
+      allow read: if true; 
+      allow write: if false; 
+    }
+    match /locations/{locId} { 
+      allow read: if true; 
+      allow write: if false; 
+    }
+    match /flat_fares/{fareId} { 
+      allow read: if true; 
+      allow write: if false; 
+    }
+    match /offers/{offerId} { 
+      allow read: if true; 
+      allow write: if false; 
+    }
+
+    // User Profiles: Users read own profile; Admins can read all profiles
+    match /users/{userId} {
+      allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.admin == true);
+      allow write: if false; // ALL WRITES VIA FASTAPI BACKEND
+    }
+
+    // Bookings: Customers read own rides; Admins read all rides
+    match /bookings/{bookingId} {
+      allow read: if request.auth != null && (resource.data.customer_id == request.auth.uid || request.auth.token.admin == true);
+      allow write: if false; // ALL WRITES VIA FASTAPI BACKEND
+    }
+
+    // Fleet & Drivers: Admins only
+    match /vehicles/{vehicleId} {
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow write: if false; // ALL WRITES VIA FASTAPI BACKEND
+    }
+    match /drivers/{driverId} {
+      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow write: if false; // ALL WRITES VIA FASTAPI BACKEND
+    }
+
+    // Default Lockdown: All direct client writes BLOCKED globally
+    match /{document=**} {
+      allow read: if request.auth != null;
+      allow write: if false; // ALL MUTATIONS EXCLUSIVELY VIA FASTAPI BACKEND
+    }
+  }
+}

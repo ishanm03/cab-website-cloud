@@ -12,12 +12,8 @@ import {
     orderBy, 
     onSnapshot, 
     doc, 
-    updateDoc,
     getDoc,
-    getDocs,
-    setDoc,
-    deleteDoc,
-    serverTimestamp
+    getDocs
 } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // Global error catcher for diagnostics
