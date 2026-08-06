@@ -14,7 +14,8 @@ from app.schemas.pydantic_models import (
     AvailabilityResponse,
     QuoteEstimateRequest,
     QuoteEstimateResponse,
-    BookingCreateRequest
+    BookingCreateRequest,
+    FeedbackSubmitRequest
 )
 
 router = APIRouter(
@@ -451,5 +452,68 @@ async def list_all_bookings(current_user: AuthenticatedUser = Depends(require_ad
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch admin bookings list: {str(e)}"
+        )
+
+@router.post("/bookings/{booking_id}/feedback")
+async def submit_booking_feedback(
+    booking_id: str,
+    request: FeedbackSubmitRequest,
+    current_user: AuthenticatedUser = Depends(get_current_user)
+):
+    """
+    Rider reviews a completed booking and submits star rating & comments.
+    """
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database offline."
+        )
+    try:
+        doc_ref = db.collection("bookings").document(booking_id)
+        doc_snap = doc_ref.get()
+        if not doc_snap.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found."
+            )
+        booking = doc_snap.to_dict()
+        
+        # Verify ownership
+        if booking.get("customer_id") != current_user.uid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unauthorized: You can only review your own rides."
+            )
+        
+        # Verify status is completed
+        if booking.get("status") != "completed":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only completed rides can be reviewed."
+            )
+            
+        # Prevent duplicates
+        if booking.get("feedback") is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Feedback has already been submitted for this ride."
+            )
+            
+        feedback_payload = {
+            "feedback": {
+                "rating": request.rating,
+                "comments": request.comments,
+                "submitted_ts": SERVER_TIMESTAMP
+            },
+            "updated_ts": SERVER_TIMESTAMP
+        }
+        doc_ref.update(feedback_payload)
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to submit feedback: {str(e)}"
         )
 

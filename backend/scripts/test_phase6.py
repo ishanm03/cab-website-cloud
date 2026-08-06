@@ -143,6 +143,16 @@ def run_tests():
             assert response.json()["count"] == 1
             print("✓ Dynamic fleet seeding validated successfully!")
 
+            # Test 10: POST /sync-schemas
+            print("Test 10: POST /api/v1/admin/sync-schemas...")
+            # Mock streams to avoid errors in seeding loop
+            mock_db.collection.return_value.stream.return_value = []
+            mock_db.collection.return_value.document.return_value.get.return_value.exists = False
+            response = client.post("/api/v1/admin/sync-schemas", headers=admin_headers)
+            assert response.status_code == 200
+            assert response.json()["status"] == "success"
+            print("✓ Schema sync operations validated successfully!")
+
     print("\n✓✓✓ All Phase 6 Admin Operations Integration Tests Passed! ✓✓✓")
 
 if __name__ == "__main__":

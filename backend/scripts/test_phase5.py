@@ -85,6 +85,28 @@ def run_tests():
             assert data[1]["booking_id"] == "BK-0001"
             print("✓ Admin global booking feed successfully fetched with correct descending sort!")
 
+    # Test Case 4: POST /api/v1/bookings/{booking_id}/feedback
+    print("Test 4: POST /api/v1/bookings/BK-0001/feedback (Rider submitting feedback)...")
+    with patch("firebase_admin.auth.verify_id_token", return_value=rider_payload):
+        with patch("app.routers.bookings.db") as mock_db:
+            # Mock get doc exists and belongs to rider and status is completed
+            mock_doc_snap = MagicMock()
+            mock_doc_snap.exists = True
+            mock_doc_snap.to_dict.return_value = {
+                "customer_id": "test_rider_p5",
+                "status": "completed",
+                "feedback": None
+            }
+            mock_db.collection.return_value.document.return_value.get.return_value = mock_doc_snap
+            
+            fb_payload = {
+                "rating": 5,
+                "comments": "Excellent ride!"
+            }
+            response = client.post("/api/v1/bookings/BK-0001/feedback", json=fb_payload, headers=rider_headers)
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+            print("✓ Rider feedback submitted successfully!")
+
     print("\n✓✓✓ All Phase 5 Booking Feeds & List Integration Tests Passed! ✓✓✓")
 
 if __name__ == "__main__":

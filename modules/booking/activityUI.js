@@ -4,6 +4,7 @@ import { auth, db } from "../shared/firebase.js";
 import { utils } from "../shared/utils.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { terminalCoordinates } from "../shared/routesMatrix.js";
+import { bookingService } from "./bookingService.js";
 import { 
     collection, 
     query, 
@@ -371,15 +372,7 @@ function bindActivityListInteractiveEvents() {
             feedbackSection.innerHTML = '<p class="text-xs text-slate-400 italic text-center py-2">Saving your review...</p>';
 
             try {
-                const bookingDocRef = doc(db, "bookings", bookingId);
-                await updateDoc(bookingDocRef, {
-                    feedback: {
-                        rating: localSelectedRating,
-                        comments: commentsText,
-                        submitted_ts: serverTimestamp()
-                    },
-                    updated_ts: serverTimestamp()
-                });
+                await bookingService.submitFeedback(bookingId, localSelectedRating, commentsText);
 
                 // Success render inside expanded card directly
                 feedbackSection.innerHTML = `
@@ -398,7 +391,7 @@ function bindActivityListInteractiveEvents() {
                     </div>
                 `;
             } catch (error) {
-                console.error("IshanCabs: Failed to save rider review", error);
+                console.error("SethCabs: Failed to save rider review", error);
                 feedbackSection.innerHTML = `<p class="text-rose-400 text-[10px] text-center">Failed to save review: ${error.message}. Please close and reopen history.</p>`;
             }
         });

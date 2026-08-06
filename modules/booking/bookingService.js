@@ -293,6 +293,29 @@ Please confirm driver and vehicle allocation details. Thank you!`;
             console.error("SethCabs: Error verifying promo code via API:", error);
             return { valid: false, discount: 0, message: "Error verifying promo code. Please try again." };
         }
+    },
+
+    async submitFeedback(bookingId, rating, comments) {
+        try {
+            const token = db && typeof auth !== "undefined" && auth.currentUser ? await auth.currentUser.getIdToken() : null;
+            const headers = { "Content-Type": "application/json" };
+            if (token) {
+                headers["Authorization"] = `Bearer ${token}`;
+            }
+            const response = await fetch(`${API_BASE}/bookings/${bookingId}/feedback`, {
+                method: "POST",
+                headers: headers,
+                body: JSON.stringify({ rating, comments })
+            });
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || "Failed to submit feedback.");
+            }
+            return await response.json();
+        } catch (error) {
+            console.error("SethCabs: Error submitting feedback:", error);
+            throw error;
+        }
     }
 };
 
