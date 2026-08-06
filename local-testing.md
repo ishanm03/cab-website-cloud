@@ -266,6 +266,126 @@ For each test case request in Insomnia:
 
 ---
 
+### Test Case 1.7: Vehicles & Drivers Roster CRUD (Admin only)
+
+#### 1. Add new Vehicle
+* **Endpoint**: `POST http://127.0.0.1:8000/api/v1/admin/vehicles`
+* **Request Body**:
+  ```json
+  {
+    "plate_number": "WB-02-B-8888",
+    "model": "Hyundai Verna",
+    "tier": "premium",
+    "status": "active",
+    "passengers": 4,
+    "address": "Kolkata Hub Garage"
+  }
+  ```
+* **Expected Success (HTTP 200)**: returns `{"id": "WB02B8888", "status": "success"}`
+
+#### 2. Add new Driver
+* **Endpoint**: `POST http://127.0.0.1:8000/api/v1/admin/drivers`
+* **Request Body**:
+  ```json
+  {
+    "name": "Subhash Chandra",
+    "phone": "9876543210",
+    "license_number": "DL-WB02-2026888",
+    "status": "active",
+    "assigned_vehicle_id": "WB02B8888",
+    "address": "Driver Quarters, Salt Lake"
+  }
+  ```
+* **Expected Success (HTTP 200)**: returns `{"id": "9876543210", "status": "success"}`
+
+#### 3. Verify Bidirectional Link
+* **Endpoint**: `GET http://127.0.0.1:8000/api/v1/admin/vehicles`
+* **Expected Success (HTTP 200)**: The returned list includes `WB02B8888` with `assigned_driver_id` correctly linked as `9876543210`.
+
+---
+
+### Test Case 1.8: Predefined Locations & Flat Fares CRUD (Admin only)
+
+#### 1. Add flat fare overrides
+* **Endpoint**: `POST http://127.0.0.1:8000/api/v1/admin/flat_fares`
+* **Request Body**:
+  ```json
+  {
+    "pickup_name": "Sealdah Station",
+    "drop_name": "New Town",
+    "fares": {
+      "compact": 450,
+      "premium": 600,
+      "suv": 800,
+      "muv": 1100
+    }
+  }
+  ```
+* **Expected Success (HTTP 200)**: returns `{"id": "sealdah_station_new_town", "status": "success"}`
+
+---
+
+### Test Case 1.9: Offers & Coupons Manager (Admin only)
+
+#### 1. Add Promo Code
+* **Endpoint**: `POST http://127.0.0.1:8000/api/v1/admin/offers`
+* **Request Body**:
+  ```json
+  {
+    "code": "FESTIVE500",
+    "discount_type": "flat",
+    "discount_value": 500.0,
+    "min_fare_threshold": 2000.0,
+    "status": "active"
+  }
+  ```
+* **Expected Success (HTTP 200)**: returns `{"id": "FESTIVE500", "status": "success"}`
+
+---
+
+### Test Case 1.10: Booking State Transitions & Actions (Admin only)
+
+#### 1. Allocate Driver and Approve Booking
+* **Endpoint**: `PATCH http://127.0.0.1:8000/api/v1/admin/bookings/BK-20260810-XXXX`
+* **Request Body**:
+  ```json
+  {
+    "status": "confirmed",
+    "driver_assignment": {
+      "driver_id": "9876543210",
+      "driver_name": "Subhash Chandra",
+      "driver_phone": "9876543210",
+      "vehicle_id": "WB02B8888",
+      "vehicle_model": "Hyundai Verna",
+      "vehicle_number": "WB-02-B-8888"
+    }
+  }
+  ```
+* **Expected Success (HTTP 200)**: returns updated booking metadata.
+
+#### 2. Start Trip
+* **Endpoint**: `PATCH http://127.0.0.1:8000/api/v1/admin/bookings/BK-20260810-XXXX`
+* **Request Body**:
+  ```json
+  {
+    "status": "active"
+  }
+  ```
+* **Expected Success (HTTP 200)**: booking status updates to `active`.
+
+#### 3. Complete Trip & Set Payment Paid
+* **Endpoint**: `PATCH http://127.0.0.1:8000/api/v1/admin/bookings/BK-20260810-XXXX`
+* **Request Body**:
+  ```json
+  {
+    "status": "completed",
+    "payment_status": "paid"
+  }
+  ```
+* **Expected Success (HTTP 200)**: booking status updates to `completed`.
+
+---
+
 ## 💻 Part 2: Frontend UI manual verification
 
 ### Test Case 2.1: Booking Step 1 Validation
@@ -285,6 +405,32 @@ For each test case request in Insomnia:
 2. Click the "Rider Activity / History" CTA.
 3. **Assert**: Renders all past bookings sorted chronologically descending. Renders map routes with red pickup and drop markers.
 4. Locate a completed booking. Renders a feedback comment rating modal.
+
+### Test Case 2.4: Admin Dashboard Pending Roster Allocations UI
+1. Open the Admin Console (`http://127.0.0.1:5500/modules/admin/admin.html`).
+2. Log in using an Admin account credentials.
+3. **Assert**: The dashboard renders a grid table of active/pending bookings.
+4. Locate a booking in the "Pending Approval" queue. Click **Manage Allocations**.
+5. **Assert**: An assignment overlay menu pops up showing the active driver roster and vehicle catalog dropdown options.
+6. Select a driver (e.g. Ramesh) and vehicle (e.g. WB02B2222) and click **Approve & Dispatch**.
+7. **Assert**: The overlay closes, the booking row status updates to "Confirmed", and the manual page table updates in real-time.
+
+### Test Case 2.5: Admin Dashboard Fleet & Roster Control UI
+1. Navigate to the **Fleet Registry** or **Drivers Directory** tabs inside the Admin Console.
+2. Click **Register Vehicle**.
+3. Input Plate Number `WB-02-B-9999`, Model `Suzuki Ertiga`, select Tier `suv`, select Status `active`, and click **Save**.
+4. **Assert**: The new vehicle appears instantly in the fleet registry table list.
+5. Click **Add Driver**.
+6. Input Name `Pranab Roy`, Phone `9830012345`, select Assigned Vehicle `WB02B9999`, select Status `active`, and click **Save**.
+7. **Assert**: The driver is saved and successfully linked. Open the vehicle details card and assert that Pranab Roy is bidirectionally shown as the active driver.
+
+### Test Case 2.6: Admin Dashboard Settings & Fares Manager UI
+1. Navigate to the **Pricing settings** tab in the Admin Console.
+2. The UI renders input cards for Local, Rental, and Intercity rates.
+3. Modify the base fare of Local Compact from `550` to `600`.
+4. Click **Publish Fares Configuration**.
+5. **Assert**: A success banner displays `"Tariff configurations published and versioned successfully!"`.
+6. Open the booking panel as a rider (`http://127.0.0.1:5500/modules/booking/booking.html`) and check a Local Compact estimate. Assert that the fare calculations now reflect the updated base fare of `600`.
 
 ---
 
