@@ -212,25 +212,6 @@ const driverRegistryTbody = document.getElementById("driver-registry-tbody");
 
 // Fares Configuration Form
 const faresMatrixForm = document.getElementById("fares-matrix-form");
-const fareCompactBase = document.getElementById("fare-compact-base");
-const fareCompactKm = document.getElementById("fare-compact-km");
-const fareCompactHour = document.getElementById("fare-compact-hour");
-const fareCompactAllowance = document.getElementById("fare-compact-allowance");
-
-const farePremiumBase = document.getElementById("fare-premium-base");
-const farePremiumKm = document.getElementById("fare-premium-km");
-const farePremiumHour = document.getElementById("fare-premium-hour");
-const farePremiumAllowance = document.getElementById("fare-premium-allowance");
-
-const fareSuvBase = document.getElementById("fare-suv-base");
-const fareSuvKm = document.getElementById("fare-suv-km");
-const fareSuvHour = document.getElementById("fare-suv-hour");
-const fareSuvAllowance = document.getElementById("fare-suv-allowance");
-
-const fareMuvBase = document.getElementById("fare-muv-base");
-const fareMuvKm = document.getElementById("fare-muv-km");
-const fareMuvHour = document.getElementById("fare-muv-hour");
-const fareMuvAllowance = document.getElementById("fare-muv-allowance");
 
 // Promo Offer Form
 const promoCodeForm = document.getElementById("promo-code-form");
@@ -294,6 +275,7 @@ function initAdminUI() {
 
     // 8. Bind View Switchers
     setupViewSwitchers();
+    setupFareSubTabs();
 
     // 9. Bind dynamic settings & coupon forms
     faresMatrixForm.addEventListener("submit", handleFaresFormSubmit);
@@ -539,6 +521,31 @@ function setupFilterTabs() {
             currentStatusFilter = tab.filter;
             renderBookings();
         });
+    });
+}
+
+function setupFareSubTabs() {
+    const tabs = ["local", "rental", "intercity", "global"];
+    tabs.forEach(tabId => {
+        const btn = document.getElementById(`fare-tab-${tabId}`);
+        if (btn) {
+            btn.addEventListener("click", () => {
+                // Remove active styling from all sub-tabs
+                tabs.forEach(t => {
+                    const otherBtn = document.getElementById(`fare-tab-${t}`);
+                    const panel = document.getElementById(`fare-panel-${t}`);
+                    if (otherBtn) {
+                        otherBtn.className = "fare-subtab px-4 py-2 text-xs font-black tracking-wider uppercase border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-all duration-300";
+                    }
+                    if (panel) utils.hideElement(panel);
+                });
+                
+                // Add active styling to current sub-tab
+                btn.className = "fare-subtab px-4 py-2 text-xs font-black tracking-wider uppercase border-b-2 border-amber-500 text-amber-400 transition-all duration-300";
+                const activePanel = document.getElementById(`fare-panel-${tabId}`);
+                if (activePanel) utils.showElement(activePanel);
+            });
+        }
     });
 }
 
@@ -1291,43 +1298,63 @@ async function loadFaresMatrix() {
         }
         
         const rates = docSnap.data().rates;
-        const isNested = (rates.local !== undefined);
-
-        const getVal = (tier, field) => {
-            if (isNested) {
-                if (field === "base_cost") return rates.local?.[tier]?.base_fare;
-                if (field === "rate_per_km") return rates.local?.[tier]?.extra_km_rate;
-                if (field === "rate_per_hour") return rates.rental?.[tier]?.extra_hour_rate;
-                if (field === "driver_allowance_per_day") return rates.intercity?.[tier]?.driver_allowance;
-                return undefined;
-            } else {
-                return rates[tier]?.[field];
-            }
-        };
         
-        // Hydrate Compact Tier inputs
-        fareCompactBase.value = getVal("compact", "base_cost") ?? "";
-        fareCompactKm.value = getVal("compact", "rate_per_km") ?? "";
-        fareCompactHour.value = getVal("compact", "rate_per_hour") ?? "";
-        fareCompactAllowance.value = getVal("compact", "driver_allowance_per_day") ?? "";
+        // 1. Hydrate Local Panel Inputs
+        const local = rates.local || {};
+        const tiers = ["compact", "premium", "suv", "muv"];
+        tiers.forEach(tier => {
+            const data = local[tier] || {};
+            const baseInput = document.getElementById(`local-${tier}-base`);
+            const kmInput = document.getElementById(`local-${tier}-km`);
+            const waitInput = document.getElementById(`local-${tier}-wait`);
+            const nightInput = document.getElementById(`local-${tier}-night`);
+            if (baseInput) baseInput.value = data.base_fare ?? "";
+            if (kmInput) kmInput.value = data.extra_km_rate ?? "";
+            if (waitInput) waitInput.value = data.waiting_rate ?? "";
+            if (nightInput) nightInput.value = data.night_charge ?? "";
+        });
 
-        // Hydrate Premium Tier inputs
-        farePremiumBase.value = getVal("premium", "base_cost") ?? "";
-        farePremiumKm.value = getVal("premium", "rate_per_km") ?? "";
-        farePremiumHour.value = getVal("premium", "rate_per_hour") ?? "";
-        farePremiumAllowance.value = getVal("premium", "driver_allowance_per_day") ?? "";
+        // 2. Hydrate Rental Panel Inputs
+        const rental = rates.rental || {};
+        tiers.forEach(tier => {
+            const data = rental[tier] || {};
+            const baseInput = document.getElementById(`rental-${tier}-base`);
+            const hoursInput = document.getElementById(`rental-${tier}-hours`);
+            const kmInput = document.getElementById(`rental-${tier}-km`);
+            const extraKmInput = document.getElementById(`rental-${tier}-extrakm`);
+            const extraHourInput = document.getElementById(`rental-${tier}-extrahour`);
+            const nightInput = document.getElementById(`rental-${tier}-night`);
+            const discountInput = document.getElementById(`rental-${tier}-discount`);
+            if (baseInput) baseInput.value = data.base_fare ?? "";
+            if (hoursInput) hoursInput.value = data.included_hours ?? "";
+            if (kmInput) kmInput.value = data.included_km ?? "";
+            if (extraKmInput) extraKmInput.value = data.extra_km_rate ?? "";
+            if (extraHourInput) extraHourInput.value = data.extra_hour_rate ?? "";
+            if (nightInput) nightInput.value = data.night_charge ?? "";
+            if (discountInput) discountInput.value = data.default_discount ?? "";
+        });
 
-        // Hydrate SUV Tier inputs
-        fareSuvBase.value = getVal("suv", "base_cost") ?? "";
-        fareSuvKm.value = getVal("suv", "rate_per_km") ?? "";
-        fareSuvHour.value = getVal("suv", "rate_per_hour") ?? "";
-        fareSuvAllowance.value = getVal("suv", "driver_allowance_per_day") ?? "";
+        // 3. Hydrate Intercity Panel Inputs
+        const intercity = rates.intercity || {};
+        tiers.forEach(tier => {
+            const data = intercity[tier] || {};
+            const kmInput = document.getElementById(`intercity-${tier}-km`);
+            const allowanceInput = document.getElementById(`intercity-${tier}-allowance`);
+            const minKmInput = document.getElementById(`intercity-${tier}-minkm`);
+            const nightHaltInput = document.getElementById(`intercity-${tier}-nighthalt`);
+            if (kmInput) kmInput.value = data.rate_per_km ?? "";
+            if (allowanceInput) allowanceInput.value = data.driver_allowance ?? "";
+            if (minKmInput) minKmInput.value = data.min_km_per_day ?? "";
+            if (nightHaltInput) nightHaltInput.value = data.night_halt ?? "";
+        });
 
-        // Hydrate MUV Tier inputs
-        fareMuvBase.value = getVal("muv", "base_cost") ?? "";
-        fareMuvKm.value = getVal("muv", "rate_per_km") ?? "";
-        fareMuvHour.value = getVal("muv", "rate_per_hour") ?? "";
-        fareMuvAllowance.value = getVal("muv", "driver_allowance_per_day") ?? "";
+        // 4. Hydrate Global Rules Inputs
+        const globalRules = rates.global || {};
+        const nightStartInput = document.getElementById("global-night-start");
+        const nightEndInput = document.getElementById("global-night-end");
+        if (nightStartInput) nightStartInput.value = globalRules.night_charge_start ?? "23:59";
+        if (nightEndInput) nightEndInput.value = globalRules.night_charge_end ?? "06:00";
+
     } catch (err) {
         console.error("Failed to load fare configurations:", err);
         utils.showAlert(adminAlert, "Error fetching fare configurations: " + err.message);
@@ -1340,36 +1367,56 @@ async function handleFaresFormSubmit(e) {
 
     utils.showAlert(adminAlert, "Saving fare parameters dynamically...", "success");
 
-    const newRates = {
-        compact: {
-            base_cost: parseFloat(fareCompactBase.value) || 0,
-            rate_per_km: parseFloat(fareCompactKm.value) || 0,
-            rate_per_hour: parseFloat(fareCompactHour.value) || 0,
-            driver_allowance_per_day: parseFloat(fareCompactAllowance.value) || 0
-        },
-        premium: {
-            base_cost: parseFloat(farePremiumBase.value) || 0,
-            rate_per_km: parseFloat(farePremiumKm.value) || 0,
-            rate_per_hour: parseFloat(farePremiumHour.value) || 0,
-            driver_allowance_per_day: parseFloat(farePremiumAllowance.value) || 0
-        },
-        suv: {
-            base_cost: parseFloat(fareSuvBase.value) || 0,
-            rate_per_km: parseFloat(fareSuvKm.value) || 0,
-            rate_per_hour: parseFloat(fareSuvHour.value) || 0,
-            driver_allowance_per_day: parseFloat(fareSuvAllowance.value) || 0
-        },
-        muv: {
-            base_cost: parseFloat(fareMuvBase.value) || 0,
-            rate_per_km: parseFloat(fareMuvKm.value) || 0,
-            rate_per_hour: parseFloat(fareMuvHour.value) || 0,
-            driver_allowance_per_day: parseFloat(fareMuvAllowance.value) || 0
+    const tiers = ["compact", "premium", "suv", "muv"];
+    const local = {};
+    tiers.forEach(tier => {
+        local[tier] = {
+            base_fare: parseFloat(document.getElementById(`local-${tier}-base`).value) || 0,
+            extra_km_rate: parseFloat(document.getElementById(`local-${tier}-km`).value) || 0,
+            waiting_rate: parseFloat(document.getElementById(`local-${tier}-wait`).value) || 0,
+            night_charge: parseFloat(document.getElementById(`local-${tier}-night`).value) || 0
+        };
+    });
+
+    const rental = {};
+    tiers.forEach(tier => {
+        rental[tier] = {
+            base_fare: parseFloat(document.getElementById(`rental-${tier}-base`).value) || 0,
+            included_hours: parseFloat(document.getElementById(`rental-${tier}-hours`).value) || 0,
+            included_km: parseFloat(document.getElementById(`rental-${tier}-km`).value) || 0,
+            extra_km_rate: parseFloat(document.getElementById(`rental-${tier}-extrakm`).value) || 0,
+            extra_hour_rate: parseFloat(document.getElementById(`rental-${tier}-extrahour`).value) || 0,
+            night_charge: parseFloat(document.getElementById(`rental-${tier}-night`).value) || 0,
+            default_discount: parseFloat(document.getElementById(`rental-${tier}-discount`).value) || 0
+        };
+    });
+
+    const intercity = {};
+    tiers.forEach(tier => {
+        intercity[tier] = {
+            rate_per_km: parseFloat(document.getElementById(`intercity-${tier}-km`).value) || 0,
+            driver_allowance: parseFloat(document.getElementById(`intercity-${tier}-allowance`).value) || 0,
+            min_km_per_day: parseFloat(document.getElementById(`intercity-${tier}-minkm`).value) || 0,
+            night_halt: parseFloat(document.getElementById(`intercity-${tier}-nighthalt`).value) || 0
+        };
+    });
+
+    const globalRules = {
+        night_charge_start: document.getElementById("global-night-start").value || "23:59",
+        night_charge_end: document.getElementById("global-night-end").value || "06:00"
+    };
+
+    const payload = {
+        rates: {
+            local,
+            rental,
+            intercity,
+            global: globalRules
         }
     };
 
     try {
-        await adminApiCall("/admin/settings/rates", "PUT", { rates: newRates });
-
+        await adminApiCall("/admin/settings/rates", "PUT", payload);
         utils.showAlert(adminAlert, "Fare matrix saved and history version logged successfully!", "success");
     } catch (err) {
         console.error("Failed to write dynamic settings rates doc:", err);

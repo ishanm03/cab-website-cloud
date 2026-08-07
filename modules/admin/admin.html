@@ -287,97 +287,375 @@
                         <p class="text-slate-400 text-xs mt-1">Configure parameters for compact, premium, suv, and muv vehicle tiers. Future bookings will use these rates.</p>
                     </div>
 
+                    <!-- Dynamic Fares Tab Menu -->
+                    <div class="flex gap-2 border-b border-slate-800 pb-1">
+                        <button type="button" id="fare-tab-local" class="fare-subtab px-4 py-2 text-xs font-black tracking-wider uppercase border-b-2 border-amber-500 text-amber-400 transition-all duration-300">Local Rides</button>
+                        <button type="button" id="fare-tab-rental" class="fare-subtab px-4 py-2 text-xs font-black tracking-wider uppercase border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-all duration-300">Hourly Rentals</button>
+                        <button type="button" id="fare-tab-intercity" class="fare-subtab px-4 py-2 text-xs font-black tracking-wider uppercase border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-all duration-300">Outstation / Intercity</button>
+                        <button type="button" id="fare-tab-global" class="fare-subtab px-4 py-2 text-xs font-black tracking-wider uppercase border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-all duration-300">Global Rules</button>
+                    </div>
+
                     <form id="fares-matrix-form" class="space-y-6">
-                        <!-- Tiers Roster -->
-                        <div class="space-y-6">
-                            <!-- Compact Ride Tier -->
-                            <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
-                                <h4 class="font-extrabold text-amber-400 text-sm uppercase tracking-wider">Compact Ride Tier</h4>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
-                                        <input type="number" id="fare-compact-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                        <!-- 1. LOCAL RIDES PANEL -->
+                        <div id="fare-panel-local" class="fare-panel space-y-5">
+                            <p class="text-xs text-slate-400">Configure base costs, extra distance rates, and waiting fees for local point-to-point transfers.</p>
+                            
+                            <!-- Local Tier Inputs -->
+                            <div class="space-y-4">
+                                <!-- Compact Local -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">Compact Local</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
+                                            <input type="number" id="local-compact-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra KM Rate (₹)</label>
+                                            <input type="number" step="0.01" id="local-compact-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Waiting Fee (₹/min)</label>
+                                            <input type="number" step="0.01" id="local-compact-wait" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge (₹)</label>
+                                            <input type="number" id="local-compact-night" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rate / KM (₹)</label>
-                                        <input type="number" step="0.01" id="fare-compact-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                </div>
+
+                                <!-- Premium Local -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">Premium Local</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
+                                            <input type="number" id="local-premium-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra KM Rate (₹)</label>
+                                            <input type="number" step="0.01" id="local-premium-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Waiting Fee (₹/min)</label>
+                                            <input type="number" step="0.01" id="local-premium-wait" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge (₹)</label>
+                                            <input type="number" id="local-premium-night" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rate / Hour (₹)</label>
-                                        <input type="number" step="0.01" id="fare-compact-hour" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                </div>
+
+                                <!-- SUV Local -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">SUV Local</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
+                                            <input type="number" id="local-suv-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra KM Rate (₹)</label>
+                                            <input type="number" step="0.01" id="local-suv-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Waiting Fee (₹/min)</label>
+                                            <input type="number" step="0.01" id="local-suv-wait" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge (₹)</label>
+                                            <input type="number" id="local-suv-night" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Driver Allow. (₹)</label>
-                                        <input type="number" id="fare-compact-allowance" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                </div>
+
+                                <!-- MUV Local -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">MUV Local</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
+                                            <input type="number" id="local-muv-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra KM Rate (₹)</label>
+                                            <input type="number" step="0.01" id="local-muv-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Waiting Fee (₹/min)</label>
+                                            <input type="number" step="0.01" id="local-muv-wait" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge (₹)</label>
+                                            <input type="number" id="local-muv-night" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Premium Ride Tier -->
-                            <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
-                                <h4 class="font-extrabold text-amber-400 text-sm uppercase tracking-wider">Premium Ride Tier</h4>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
-                                        <input type="number" id="fare-premium-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                        <!-- 2. HOURLY RENTAL PANEL -->
+                        <div id="fare-panel-rental" class="fare-panel hidden space-y-5">
+                            <p class="text-xs text-slate-400">Configure flat hourly packages containing pre-allocated times and distances.</p>
+                            
+                            <div class="space-y-4">
+                                <!-- Compact Rental -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">Compact Rental</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
+                                            <input type="number" id="rental-compact-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Included Hours</label>
+                                            <input type="number" id="rental-compact-hours" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Included KM</label>
+                                            <input type="number" id="rental-compact-km" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra KM Rate (₹)</label>
+                                            <input type="number" step="0.01" id="rental-compact-extrakm" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra Hour Rate (₹)</label>
+                                            <input type="number" step="0.01" id="rental-compact-extrahour" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge (₹)</label>
+                                            <input type="number" id="rental-compact-night" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Promo Discount (₹)</label>
+                                            <input type="number" id="rental-compact-discount" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rate / KM (₹)</label>
-                                        <input type="number" step="0.01" id="fare-premium-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                </div>
+
+                                <!-- Premium Rental -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">Premium Rental</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
+                                            <input type="number" id="rental-premium-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Included Hours</label>
+                                            <input type="number" id="rental-premium-hours" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Included KM</label>
+                                            <input type="number" id="rental-premium-km" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra KM Rate (₹)</label>
+                                            <input type="number" step="0.01" id="rental-premium-extrakm" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra Hour Rate (₹)</label>
+                                            <input type="number" step="0.01" id="rental-premium-extrahour" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge (₹)</label>
+                                            <input type="number" id="rental-premium-night" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Promo Discount (₹)</label>
+                                            <input type="number" id="rental-premium-discount" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rate / Hour (₹)</label>
-                                        <input type="number" step="0.01" id="fare-premium-hour" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                </div>
+
+                                <!-- SUV Rental -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">SUV Rental</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
+                                            <input type="number" id="rental-suv-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Included Hours</label>
+                                            <input type="number" id="rental-suv-hours" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Included KM</label>
+                                            <input type="number" id="rental-suv-km" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra KM Rate (₹)</label>
+                                            <input type="number" step="0.01" id="rental-suv-extrakm" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra Hour Rate (₹)</label>
+                                            <input type="number" step="0.01" id="rental-suv-extrahour" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge (₹)</label>
+                                            <input type="number" id="rental-suv-night" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Promo Discount (₹)</label>
+                                            <input type="number" id="rental-suv-discount" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Driver Allow. (₹)</label>
-                                        <input type="number" id="fare-premium-allowance" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                </div>
+
+                                <!-- MUV Rental -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">MUV Rental</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
+                                            <input type="number" id="rental-muv-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Included Hours</label>
+                                            <input type="number" id="rental-muv-hours" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Included KM</label>
+                                            <input type="number" id="rental-muv-km" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra KM Rate (₹)</label>
+                                            <input type="number" step="0.01" id="rental-muv-extrakm" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Extra Hour Rate (₹)</label>
+                                            <input type="number" step="0.01" id="rental-muv-extrahour" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge (₹)</label>
+                                            <input type="number" id="rental-muv-night" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Promo Discount (₹)</label>
+                                            <input type="number" id="rental-muv-discount" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- SUV Tier -->
-                            <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
-                                <h4 class="font-extrabold text-amber-400 text-sm uppercase tracking-wider">SUV Tier</h4>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
-                                        <input type="number" id="fare-suv-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                        <!-- 3. OUTSTATION / INTERCITY PANEL -->
+                        <div id="fare-panel-intercity" class="fare-panel hidden space-y-5">
+                            <p class="text-xs text-slate-400">Configure round-trip base rates, allowances, and limits for long-distance city-to-city rides.</p>
+                            
+                            <div class="space-y-4">
+                                <!-- Compact Outstation -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">Compact Outstation</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Rate / KM (₹)</label>
+                                            <input type="number" step="0.01" id="intercity-compact-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Driver Allowance (₹/day)</label>
+                                            <input type="number" id="intercity-compact-allowance" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Min KM / Day</label>
+                                            <input type="number" id="intercity-compact-minkm" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Halt Fee (₹)</label>
+                                            <input type="number" id="intercity-compact-nighthalt" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rate / KM (₹)</label>
-                                        <input type="number" step="0.01" id="fare-suv-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                </div>
+
+                                <!-- Premium Outstation -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">Premium Outstation</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Rate / KM (₹)</label>
+                                            <input type="number" step="0.01" id="intercity-premium-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Driver Allowance (₹/day)</label>
+                                            <input type="number" id="intercity-premium-allowance" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Min KM / Day</label>
+                                            <input type="number" id="intercity-premium-minkm" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Halt Fee (₹)</label>
+                                            <input type="number" id="intercity-premium-nighthalt" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rate / Hour (₹)</label>
-                                        <input type="number" step="0.01" id="fare-suv-hour" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                </div>
+
+                                <!-- SUV Outstation -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">SUV Outstation</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Rate / KM (₹)</label>
+                                            <input type="number" step="0.01" id="intercity-suv-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Driver Allowance (₹/day)</label>
+                                            <input type="number" id="intercity-suv-allowance" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Min KM / Day</label>
+                                            <input type="number" id="intercity-suv-minkm" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Halt Fee (₹)</label>
+                                            <input type="number" id="intercity-suv-nighthalt" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Driver Allow. (₹)</label>
-                                        <input type="number" id="fare-suv-allowance" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                </div>
+
+                                <!-- MUV Outstation -->
+                                <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                    <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">MUV Outstation</h4>
+                                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Rate / KM (₹)</label>
+                                            <input type="number" step="0.01" id="intercity-muv-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Driver Allowance (₹/day)</label>
+                                            <input type="number" id="intercity-muv-allowance" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Min KM / Day</label>
+                                            <input type="number" id="intercity-muv-minkm" required min="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Halt Fee (₹)</label>
+                                            <input type="number" id="intercity-muv-nighthalt" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- MUV Tier -->
+                        <!-- 4. GLOBAL RULES PANEL -->
+                        <div id="fare-panel-global" class="fare-panel hidden space-y-5">
+                            <p class="text-xs text-slate-400">Configure global triggers and timings for operational charges such as overnight fees.</p>
+                            
                             <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
-                                <h4 class="font-extrabold text-amber-400 text-sm uppercase tracking-wider">Group MUV Tier</h4>
-                                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">Night Charge Hours Configuration</h4>
+                                <div class="grid grid-cols-2 gap-4">
                                     <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Base Cost (₹)</label>
-                                        <input type="number" id="fare-muv-base" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                        <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge Start Time (24h)</label>
+                                        <input type="text" id="global-night-start" required placeholder="E.g. 23:59" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rate / KM (₹)</label>
-                                        <input type="number" step="0.01" id="fare-muv-km" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
-                                    </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rate / Hour (₹)</label>
-                                        <input type="number" step="0.01" id="fare-muv-hour" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
-                                    </div>
-                                    <div>
-                                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Driver Allow. (₹)</label>
-                                        <input type="number" id="fare-muv-allowance" required min="0" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                        <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge End Time (24h)</label>
+                                        <input type="text" id="global-night-end" required placeholder="E.g. 06:00" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
                                     </div>
                                 </div>
                             </div>
