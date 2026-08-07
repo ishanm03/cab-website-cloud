@@ -6,9 +6,10 @@ from typing import Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from google.cloud.firestore import SERVER_TIMESTAMP
 
+from firebase_admin import auth as firebase_auth
 from app.core.firebase import db
-from app.core.auth import require_admin, AuthenticatedUser
-from app.schemas.pydantic_models import DbCleanupRequest
+from app.core.auth import require_admin, require_super_admin, AuthenticatedUser
+from app.schemas.pydantic_models import DbCleanupRequest, AdminUserPromoteRequest
 
 router = APIRouter(
     prefix="/admin",
@@ -575,4 +576,69 @@ async def db_cleanup(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database cleanup failed: {str(e)}"
         )
+
+@router.post("/users/promote")
+async def promote_user_role(
+    request: AdminUserPromoteRequest,
+    current_user: AuthenticatedUser = Depends(require_super_admin)
+):
+    """
+    Super Admin endpoint to promote or demote user roles dynamically via Firebase Auth custom claims and Firestore /users document.
+    """
+    target_email = request.email.strip().lower()
+    target_role = request.role.strip().lower()
+    
+    if target_role not in ["admin", "rider"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role specified. Allowed roles are 'admin' or 'rider'."
+        )
+        
+    try:
+        # 1. Fetch user by email via Firebase Auth
+        user = firebase_auth.get_user_by_email(target_email)
+        uid = user.uid
+        
+        # 2. Update custom claims
+        existing_claims = user.custom_claims or {}
+        is_admin_flag = (target_role == "admin")
+        updated_claims = {**existing_claims, "admin": is_admin_flag}
+        
+        firebase_auth.set_custom_user_claims(uid, updated_claims)
+        
+        # 3. Synchronize /users/{uid} document in Firestore if DB is available
+        if db is not None:
+            user_ref = db.collection("users").document(uid)
+            user_doc = user_ref.get()
+            if user_doc.exists:
+                user_ref.update({"role": target_role, "updated_at": SERVER_TIMESTAMP})
+            else:
+                user_ref.set({
+                    "uid": uid,
+                    "email": target_email,
+                    "display_name": user.display_name or target_email.split("@")[0],
+                    "role": target_role,
+                    "created_at": SERVER_TIMESTAMP
+                })
+                
+        return {
+            "status": "success",
+            "uid": uid,
+            "email": target_email,
+            "role": target_role,
+            "admin_claim": is_admin_flag
+        }
+    except firebase_auth.UserNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with email '{target_email}' not found in Firebase Authentication."
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"User role update failed: {str(e)}"
+        )
+
 

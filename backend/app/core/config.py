@@ -25,6 +25,12 @@ class Settings(BaseSettings):
         validation_alias="FIREBASE_SERVICE_ACCOUNT_PATH"
     )
 
+    # Super Admin emails authorized to promote/demote user roles
+    SUPER_ADMIN_EMAILS: List[str] = Field(
+        default=["admin@ishancabs.com", "admin@sethcabs.com"],
+        validation_alias="SUPER_ADMIN_EMAILS"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

@@ -154,5 +154,10 @@ class DbCleanupRequest(BaseModel):
     document_ids: Optional[List[str]] = None
     confirm_delete_all: Optional[bool] = False
 
+class AdminUserPromoteRequest(BaseModel):
+    email: str = Field(..., min_length=1)
+    role: str = Field(default="admin", description="Target user role: 'admin' or 'rider'")
+
+
 
 

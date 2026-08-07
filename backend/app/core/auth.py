@@ -57,6 +57,8 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+from app.core.config import settings
+
 async def require_admin(
     current_user: AuthenticatedUser = Depends(get_current_user)
 ) -> AuthenticatedUser:
@@ -67,5 +69,21 @@ async def require_admin(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden: Admin permissions are required to perform this action."
+        )
+    return current_user
+
+async def require_super_admin(
+    current_user: AuthenticatedUser = Depends(require_admin)
+) -> AuthenticatedUser:
+    """
+    RBAC dependency ensuring the user email matches the SUPER_ADMIN_EMAILS configuration list.
+    """
+    super_admin_list = [e.strip().lower() for e in settings.SUPER_ADMIN_EMAILS]
+    user_email = (current_user.email or "").strip().lower()
+    
+    if not user_email or user_email not in super_admin_list:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: Super Admin permissions required to manage user roles."
         )
     return current_user

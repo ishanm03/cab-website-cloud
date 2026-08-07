@@ -187,6 +187,36 @@ def run_tests():
             assert response.json()["deleted_count"] == 2
             print("✓ Full collection deletions validated successfully!")
 
+            # Test 12: POST /users/promote (Super Admin Endpoint)
+            print("Test 12: POST /api/v1/admin/users/promote...")
+            promote_payload = {"email": "newadmin@ishancabs.com", "role": "admin"}
+            
+            # Scenario A: Regular admin (not in SUPER_ADMIN_EMAILS) attempts promote -> 403 Forbidden
+            response = client.post("/api/v1/admin/users/promote", json=promote_payload, headers=admin_headers)
+            assert response.status_code == 403, f"Expected 403, got {response.status_code}"
+            print("✓ Non-Super Admin successfully blocked from role promotions!")
+            
+            # Scenario B: Super Admin (admin@ishancabs.com) promotes user
+            super_admin_payload = {
+                "uid": "super_admin_uid",
+                "email": "admin@ishancabs.com",
+                "admin": True
+            }
+            super_admin_headers = {"Authorization": "Bearer mock_super_admin_token"}
+            with patch("firebase_admin.auth.verify_id_token", return_value=super_admin_payload):
+                mock_target_user = MagicMock()
+                mock_target_user.uid = "target_uid_123"
+                mock_target_user.display_name = "New Admin"
+                mock_target_user.custom_claims = {}
+                with patch("firebase_admin.auth.get_user_by_email", return_value=mock_target_user):
+                    with patch("firebase_admin.auth.set_custom_user_claims") as mock_set_claims:
+                        response = client.post("/api/v1/admin/users/promote", json=promote_payload, headers=super_admin_headers)
+                        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+                        assert response.json()["status"] == "success"
+                        assert response.json()["role"] == "admin"
+                        mock_set_claims.assert_called_once_with("target_uid_123", {"admin": True})
+                        print("✓ Super Admin role promotion validated successfully!")
+
     print("\n✓✓✓ All Phase 6 Admin Operations Integration Tests Passed! ✓✓✓")
 
 if __name__ == "__main__":

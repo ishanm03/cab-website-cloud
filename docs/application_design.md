@@ -379,6 +379,14 @@ When an administrator assigns a driver to a vehicle (or vehicle to a driver), th
   2. If `document_ids` is not provided (or empty), check if `confirm_delete_all` is `True`. If `False`, reject request with HTTP 400.
   3. If `confirm_delete_all` is `True`, query the collection stream, queue references to a Firestore delete batch, and commit in 500-operation intervals.
 
+#### 5. POST /api/v1/admin/users/promote (Super Admin Only)
+* *Process*: Dynamically promotes or demotes user account roles.
+* *Query steps*:
+  1. Verify requester token via `require_super_admin` security dependency (asserting email matches `SUPER_ADMIN_EMAILS` list).
+  2. Search user by email via `firebase_auth.get_user_by_email(target_email)`.
+  3. Update user custom claims (`{"admin": True}` for `role="admin"`, or `{"admin": False}` for `role="rider"`).
+  4. Update Firestore `/users/{uid}` document `role` field.
+
 
 ---
 
@@ -418,12 +426,14 @@ This section lists all configurations used across the frontend and backend, deta
   CORS_ORIGINS="http://localhost:5500,http://127.0.0.1:5500"
   HMAC_QUOTE_SECRET="temporary_dev_hmac_quote_secret_key_12345"
   FIREBASE_SERVICE_ACCOUNT_PATH="/path/to/service-account.json"
+  SUPER_ADMIN_EMAILS="admin@ishancabs.com,admin@sethcabs.com"
   ```
 * **Variables Description**:
   * `PROJECT_NAME`: Title of the backend server.
   * `CORS_ORIGINS`: Allowed hostnames list permitting browser fetch requests.
   * `HMAC_QUOTE_SECRET`: Secret hashing key for cryptographically signing booking quotes.
   * `FIREBASE_SERVICE_ACCOUNT_PATH`: File path to the JSON key of your Firebase Service Account (optional if running on GCP with Application Default Credentials).
+  * `SUPER_ADMIN_EMAILS`: Authorized email addresses permitted to promote or demote user roles via `POST /admin/users/promote`.
 
 ---
 

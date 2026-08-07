@@ -377,12 +377,70 @@ For each test case request in Insomnia:
 * **Endpoint**: `PATCH http://127.0.0.1:8000/api/v1/admin/bookings/BK-20260810-XXXX`
 * **Request Body**:
   ```json
+#### 3. Complete Trip & Set Payment Paid
+* **Endpoint**: `PATCH http://127.0.0.1:8000/api/v1/admin/bookings/BK-20260810-XXXX`
+* **Request Body**:
+  ```json
   {
     "status": "completed",
     "payment_status": "paid"
   }
   ```
 * **Expected Success (HTTP 200)**: booking status updates to `completed`.
+
+---
+
+### Test Case 1.11: Super Admin User Role Promotion & Demotion (Super Admin only)
+
+#### 1. Promote Rider to Admin
+* **Endpoint**: `POST http://127.0.0.1:8000/api/v1/admin/users/promote`
+* **Auth**: Must be logged in as a Super Admin whose email is listed in `SUPER_ADMIN_EMAILS` (e.g., `admin@ishancabs.com`).
+* **Request Body**:
+  ```json
+  {
+    "email": "newadmin@ishancabs.com",
+    "role": "admin"
+  }
+  ```
+* **Expected Success (HTTP 200)**:
+  ```json
+  {
+    "status": "success",
+    "uid": "USER_FIREBASE_UID_123",
+    "email": "newadmin@ishancabs.com",
+    "role": "admin",
+    "admin_claim": true
+  }
+  ```
+
+#### 2. Demote Admin back to Rider
+* **Endpoint**: `POST http://127.0.0.1:8000/api/v1/admin/users/promote`
+* **Request Body**:
+  ```json
+  {
+    "email": "newadmin@ishancabs.com",
+    "role": "rider"
+  }
+  ```
+* **Expected Success (HTTP 200)**:
+  ```json
+  {
+    "status": "success",
+    "uid": "USER_FIREBASE_UID_123",
+    "email": "newadmin@ishancabs.com",
+    "role": "rider",
+    "admin_claim": false
+  }
+  ```
+
+#### 3. Access Denied for Regular Admin
+* **Auth**: Log in as a regular admin (not listed in `SUPER_ADMIN_EMAILS`). Submit promotion request.
+* **Expected Block (HTTP 403)**:
+  ```json
+  {
+    "detail": "Forbidden: Super Admin permissions required to manage user roles."
+  }
+  ```
 
 ---
 
