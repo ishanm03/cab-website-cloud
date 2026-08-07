@@ -173,20 +173,32 @@
                     </button>
                 </section>
 
-                <!-- View Switcher -->
-                <div class="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 gap-1 self-stretch lg:self-auto">
-                    <button type="button" id="btn-view-cards" class="flex-1 lg:flex-initial px-4 py-2.5 text-xs font-bold rounded-xl text-amber-500 bg-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                        </svg>
-                        Card View
-                    </button>
-                    <button type="button" id="btn-view-list" class="flex-1 lg:flex-initial px-4 py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200 flex items-center justify-center gap-1.5">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                        </svg>
-                        List View
-                    </button>
+                <!-- Search, Date Filter & View Controls -->
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 self-stretch lg:self-auto">
+                    <!-- Date Filter -->
+                    <div class="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 items-center justify-between sm:justify-start gap-1.5 px-4">
+                        <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 whitespace-nowrap">Ride Date:</span>
+                        <input type="date" id="filter-pickup-date" class="bg-transparent text-white border-0 outline-none text-xs font-bold focus:ring-0 cursor-pointer min-w-[120px] filter-date-picker">
+                        <button type="button" id="btn-clear-date" class="text-slate-500 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded transition-colors hidden">
+                            ✕
+                        </button>
+                    </div>
+
+                    <!-- View Switcher -->
+                    <div class="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 gap-1 flex-grow sm:flex-initial">
+                        <button type="button" id="btn-view-cards" class="flex-1 lg:flex-initial px-4 py-2.5 text-xs font-bold rounded-xl text-amber-500 bg-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                            </svg>
+                            Card View
+                        </button>
+                        <button type="button" id="btn-view-list" class="flex-1 lg:flex-initial px-4 py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200 flex items-center justify-center gap-1.5">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                            List View
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -224,6 +236,19 @@
                         </tbody>
                     </table>
                 </div>
+            </section>
+
+            <!-- Pagination Controls -->
+            <section id="bookings-pagination" class="flex justify-between items-center bg-slate-950/40 border border-slate-800/60 p-4 rounded-2xl hidden mt-6 text-xs w-full">
+                <button type="button" id="btn-prev-page" class="bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold px-4 py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                    ← Previous
+                </button>
+                <span class="text-slate-400 font-medium" id="pagination-info">
+                    Page 1 of 1
+                </span>
+                <button type="button" id="btn-next-page" class="bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold px-4 py-2.5 rounded-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                    Next →
+                </button>
             </section>
 
             <!-- Fallback Empty State -->

@@ -234,7 +234,18 @@ const bookingDetailModal = document.getElementById("booking-detail-modal");
 const bookingDetailModalBody = document.getElementById("booking-detail-modal-body");
 const btnCloseBookingDetail = document.getElementById("btn-close-booking-detail");
 
+// Date Filter & Pagination DOM handles
+const filterPickupDate = document.getElementById("filter-pickup-date");
+const btnClearDate = document.getElementById("btn-clear-date");
+const bookingsPagination = document.getElementById("bookings-pagination");
+const btnPrevPage = document.getElementById("btn-prev-page");
+const btnNextPage = document.getElementById("btn-next-page");
+const paginationInfo = document.getElementById("pagination-info");
+
 let currentViewMode = "cards"; // "cards" | "list"
+let currentPickupDateFilter = ""; // "" means all dates
+let currentPage = 1;
+const PAGE_SIZE = 10;
 
 // State Variables
 let bookingsData = [];
@@ -288,6 +299,7 @@ function initAdminUI() {
     setupViewSwitchers();
     setupFareSubTabs();
     setupListViewToggles();
+    setupDateFilterAndPaginationEvents();
 
     // 9. Bind dynamic settings & coupon forms
     faresMatrixForm.addEventListener("submit", handleFaresFormSubmit);
@@ -531,6 +543,7 @@ function setupFilterTabs() {
             tab.btn.className = "flex-1 min-w-[60px] py-2.5 text-xs font-bold rounded-xl text-amber-500 bg-slate-900 transition-all duration-200";
 
             currentStatusFilter = tab.filter;
+            currentPage = 1;
             renderBookings();
         });
     });
@@ -583,6 +596,44 @@ function setupListViewToggles() {
             utils.hideElement(bookingDetailModal);
             bookingDetailModalBody.innerHTML = "";
             destroyAllAdminMaps(); // Safe cleanup
+        });
+    }
+}
+
+function setupDateFilterAndPaginationEvents() {
+    if (filterPickupDate) {
+        filterPickupDate.addEventListener("change", () => {
+            currentPickupDateFilter = filterPickupDate.value;
+            if (currentPickupDateFilter) {
+                if (btnClearDate) btnClearDate.classList.remove("hidden");
+            } else {
+                if (btnClearDate) btnClearDate.classList.add("hidden");
+            }
+            currentPage = 1;
+            renderBookings();
+        });
+    }
+    if (btnClearDate) {
+        btnClearDate.addEventListener("click", () => {
+            if (filterPickupDate) filterPickupDate.value = "";
+            currentPickupDateFilter = "";
+            btnClearDate.classList.add("hidden");
+            currentPage = 1;
+            renderBookings();
+        });
+    }
+    if (btnPrevPage) {
+        btnPrevPage.addEventListener("click", () => {
+            if (currentPage > 1) {
+                currentPage--;
+                renderBookings();
+            }
+        });
+    }
+    if (btnNextPage) {
+        btnNextPage.addEventListener("click", () => {
+            currentPage++;
+            renderBookings();
         });
     }
 }
@@ -849,7 +900,7 @@ function renderBookings() {
     utils.hideElement(adminAlert);
 
     // Apply Filter rules supporting legacy status aliases
-    const filteredBookings = currentStatusFilter === "all" 
+    let filteredBookings = currentStatusFilter === "all" 
         ? bookingsData 
         : bookingsData.filter(b => {
             if (currentStatusFilter === "pending_approval") {
@@ -864,20 +915,47 @@ function renderBookings() {
             return b.status === currentStatusFilter;
         });
 
+    // Apply pickup travel date filter
+    if (currentPickupDateFilter) {
+        filteredBookings = filteredBookings.filter(b => {
+            return b.trip_details && b.trip_details.pickup_date === currentPickupDateFilter;
+        });
+    }
+
     if (filteredBookings.length === 0) {
         utils.hideElement(bookingsListContainer);
         utils.hideElement(bookingsListTableContainer);
+        utils.hideElement(bookingsPagination);
         utils.showElement(bookingsEmptyState);
         return;
     }
 
     utils.hideElement(bookingsEmptyState);
 
+    // Pagination calculations
+    const totalPages = Math.ceil(filteredBookings.length / PAGE_SIZE) || 1;
+    if (currentPage > totalPages) {
+        currentPage = totalPages;
+    }
+
+    if (filteredBookings.length > PAGE_SIZE) {
+        utils.showElement(bookingsPagination);
+        if (paginationInfo) paginationInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+        if (btnPrevPage) btnPrevPage.disabled = (currentPage === 1);
+        if (btnNextPage) btnNextPage.disabled = (currentPage === totalPages);
+    } else {
+        utils.hideElement(bookingsPagination);
+    }
+
+    const startIndex = (currentPage - 1) * PAGE_SIZE;
+    const endIndex = startIndex + PAGE_SIZE;
+    const paginatedBookings = filteredBookings.slice(startIndex, endIndex);
+
     if (currentViewMode === "cards") {
         utils.hideElement(bookingsListTableContainer);
         utils.showElement(bookingsListContainer);
 
-        filteredBookings.forEach(booking => {
+        paginatedBookings.forEach(booking => {
             try {
                 const card = document.createElement("div");
                 card.className = "admin-card p-6 rounded-3xl border border-slate-800/80 hover:border-slate-700/80 transition-all duration-300 flex flex-col justify-between";
@@ -889,7 +967,7 @@ function renderBookings() {
         });
 
         // Initialize maps for all rendered bookings
-        filteredBookings.forEach(booking => {
+        paginatedBookings.forEach(booking => {
             initAdminMap(booking, false);
         });
 
@@ -899,7 +977,7 @@ function renderBookings() {
         utils.hideElement(bookingsListContainer);
         utils.showElement(bookingsListTableContainer);
 
-        filteredBookings.forEach(booking => {
+        paginatedBookings.forEach(booking => {
             try {
                 const tripDetails = booking.trip_details || {};
                 const fareDetails = booking.fare_details || {};
