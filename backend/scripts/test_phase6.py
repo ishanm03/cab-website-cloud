@@ -29,8 +29,22 @@ def run_tests():
             print("Test 1: PUT /api/v1/admin/settings/rates...")
             rates_payload = {
                 "rates": {
-                    "compact": { "base_fare": 600.0, "extra_km_rate": 12.0 },
-                    "premium": { "base_fare": 700.0, "extra_km_rate": 13.0 }
+                    "local": {
+                        "compact": { "base_fare": 600.0, "extra_km_rate": 12.0, "waiting_rate": 3.0, "night_charge": 200.0 },
+                        "premium": { "base_fare": 700.0, "extra_km_rate": 13.0, "waiting_rate": 4.0, "night_charge": 300.0 }
+                    },
+                    "rental": {
+                        "compact": { "base_fare": 2400.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 12.0, "extra_hour_rate": 180.0, "night_charge": 200.0 },
+                        "premium": { "base_fare": 2600.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 13.0, "extra_hour_rate": 240.0, "night_charge": 300.0 }
+                    },
+                    "intercity": {
+                        "compact": { "rate_per_km": 12.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
+                        "premium": { "rate_per_km": 14.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 }
+                    },
+                    "global": {
+                        "night_charge_start": "23:59",
+                        "night_charge_end": "06:00"
+                    }
                 }
             }
             response = client.put("/api/v1/admin/settings/rates", json=rates_payload, headers=admin_headers)
