@@ -1278,48 +1278,56 @@ function setupViewSwitchers() {
     });
 }
 
-// Static default rates mapping fallback configuration
-const DEFAULT_RATES = {
-    compact: { rate_per_km: 10.00, driver_allowance_per_day: 300.00, rate_per_hour: 120.00, base_cost: 250.00 },
-    premium: { rate_per_km: 12.00, driver_allowance_per_day: 300.00, rate_per_hour: 150.00, base_cost: 300.00 },
-    suv:     { rate_per_km: 15.00, driver_allowance_per_day: 400.00, rate_per_hour: 200.00, base_cost: 500.00 },
-    muv:     { rate_per_km: 18.00, driver_allowance_per_day: 500.00, rate_per_hour: 250.00, base_cost: 700.00 }
-};
-
 async function loadFaresMatrix() {
     if (!db) return;
     try {
         const ratesDocRef = doc(db, "settings", "rates");
         const docSnap = await getDoc(ratesDocRef);
-        let rates = DEFAULT_RATES;
         
-        if (docSnap.exists() && docSnap.data().rates) {
-            rates = docSnap.data().rates;
+        if (!docSnap.exists() || !docSnap.data().rates) {
+            console.warn("IshanCabs: Rates configuration not found in database.");
+            utils.showAlert(adminAlert, "Rates configuration not found in database. Please configure and save rates.");
+            return;
         }
         
+        const rates = docSnap.data().rates;
+        const isNested = (rates.local !== undefined);
+
+        const getVal = (tier, field) => {
+            if (isNested) {
+                if (field === "base_cost") return rates.local?.[tier]?.base_fare;
+                if (field === "rate_per_km") return rates.local?.[tier]?.extra_km_rate;
+                if (field === "rate_per_hour") return rates.rental?.[tier]?.extra_hour_rate;
+                if (field === "driver_allowance_per_day") return rates.intercity?.[tier]?.driver_allowance;
+                return undefined;
+            } else {
+                return rates[tier]?.[field];
+            }
+        };
+        
         // Hydrate Compact Tier inputs
-        fareCompactBase.value = rates.compact?.base_cost ?? 250;
-        fareCompactKm.value = rates.compact?.rate_per_km ?? 10.00;
-        fareCompactHour.value = rates.compact?.rate_per_hour ?? 120.00;
-        fareCompactAllowance.value = rates.compact?.driver_allowance_per_day ?? 300.00;
+        fareCompactBase.value = getVal("compact", "base_cost") ?? "";
+        fareCompactKm.value = getVal("compact", "rate_per_km") ?? "";
+        fareCompactHour.value = getVal("compact", "rate_per_hour") ?? "";
+        fareCompactAllowance.value = getVal("compact", "driver_allowance_per_day") ?? "";
 
         // Hydrate Premium Tier inputs
-        farePremiumBase.value = rates.premium?.base_cost ?? 300;
-        farePremiumKm.value = rates.premium?.rate_per_km ?? 12.00;
-        farePremiumHour.value = rates.premium?.rate_per_hour ?? 150.00;
-        farePremiumAllowance.value = rates.premium?.driver_allowance_per_day ?? 300.00;
+        farePremiumBase.value = getVal("premium", "base_cost") ?? "";
+        farePremiumKm.value = getVal("premium", "rate_per_km") ?? "";
+        farePremiumHour.value = getVal("premium", "rate_per_hour") ?? "";
+        farePremiumAllowance.value = getVal("premium", "driver_allowance_per_day") ?? "";
 
         // Hydrate SUV Tier inputs
-        fareSuvBase.value = rates.suv?.base_cost ?? 500;
-        fareSuvKm.value = rates.suv?.rate_per_km ?? 15.00;
-        fareSuvHour.value = rates.suv?.rate_per_hour ?? 200.00;
-        fareSuvAllowance.value = rates.suv?.driver_allowance_per_day ?? 400.00;
+        fareSuvBase.value = getVal("suv", "base_cost") ?? "";
+        fareSuvKm.value = getVal("suv", "rate_per_km") ?? "";
+        fareSuvHour.value = getVal("suv", "rate_per_hour") ?? "";
+        fareSuvAllowance.value = getVal("suv", "driver_allowance_per_day") ?? "";
 
         // Hydrate MUV Tier inputs
-        fareMuvBase.value = rates.muv?.base_cost ?? 700;
-        fareMuvKm.value = rates.muv?.rate_per_km ?? 18.00;
-        fareMuvHour.value = rates.muv?.rate_per_hour ?? 250.00;
-        fareMuvAllowance.value = rates.muv?.driver_allowance_per_day ?? 500.00;
+        fareMuvBase.value = getVal("muv", "base_cost") ?? "";
+        fareMuvKm.value = getVal("muv", "rate_per_km") ?? "";
+        fareMuvHour.value = getVal("muv", "rate_per_hour") ?? "";
+        fareMuvAllowance.value = getVal("muv", "driver_allowance_per_day") ?? "";
     } catch (err) {
         console.error("Failed to load fare configurations:", err);
         utils.showAlert(adminAlert, "Error fetching fare configurations: " + err.message);

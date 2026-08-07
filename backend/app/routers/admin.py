@@ -94,7 +94,76 @@ async def update_rates(
     try:
         import time
         version_id = f"R-{int(time.time() * 1000)}"
-        rates = payload.get("rates", payload) # Support either wrapped in {"rates": ...} or raw
+        raw_rates = payload.get("rates", payload)
+        
+        # Check if the incoming payload is in the flat Admin form structure
+        # (meaning it has compact/premium keys directly under rates and contains base_cost keys)
+        is_flat_structure = False
+        if isinstance(raw_rates, dict):
+            first_key = next(iter(raw_rates.keys()), None)
+            if first_key in ["compact", "premium", "suv", "muv"]:
+                is_flat_structure = True
+
+        if is_flat_structure:
+            # Map the flat structure to the correct nested category structure
+            nested_rates = {
+                "local": {},
+                "rental": {},
+                "intercity": {},
+                "global": {
+                    "night_charge_start": "23:59",
+                    "night_charge_end": "06:00"
+                }
+            }
+            
+            # Default values for fields not in the simple admin form
+            tier_defaults = {
+                "compact": { "night_charge": 200.0, "rental_base_mult": 4.18, "rental_discount": 500.0 },
+                "premium": { "night_charge": 300.0, "rental_base_mult": 3.84, "rental_discount": 500.0 },
+                "suv":     { "night_charge": 400.0, "rental_base_mult": 3.73, "rental_discount": 500.0 },
+                "muv":     { "night_charge": 500.0, "rental_base_mult": 3.88, "rental_discount": 500.0 }
+            }
+
+            for tier in ["compact", "premium", "suv", "muv"]:
+                tier_data = raw_rates.get(tier, {})
+                base_cost = float(tier_data.get("base_cost") or tier_data.get("base_fare") or 0.0)
+                rate_per_km = float(tier_data.get("rate_per_km") or 0.0)
+                rate_per_hour = float(tier_data.get("rate_per_hour") or 0.0)
+                allowance = float(tier_data.get("driver_allowance_per_day") or tier_data.get("driver_allowance") or 0.0)
+                
+                defaults = tier_defaults.get(tier, { "night_charge": 200.0, "rental_base_mult": 4.0, "rental_discount": 500.0 })
+
+                # 1. Local
+                nested_rates["local"][tier] = {
+                    "base_fare": base_cost,
+                    "extra_km_rate": rate_per_km,
+                    "waiting_rate": 3.0 if tier == "compact" else (4.0 if tier == "premium" else 5.0),
+                    "night_charge": defaults["night_charge"]
+                }
+                
+                # 2. Rental (6hr/60km pkg)
+                rental_base = round(base_cost * defaults["rental_base_mult"]) if base_cost > 0 else 2000.0
+                nested_rates["rental"][tier] = {
+                    "base_fare": float(rental_base),
+                    "included_hours": 6.0,
+                    "included_km": 60.0,
+                    "extra_km_rate": rate_per_km,
+                    "extra_hour_rate": rate_per_hour,
+                    "night_charge": defaults["night_charge"],
+                    "default_discount": defaults["rental_discount"]
+                }
+                
+                # 3. Intercity (Outstation)
+                nested_rates["intercity"][tier] = {
+                    "rate_per_km": rate_per_km,
+                    "driver_allowance": allowance,
+                    "min_km_per_day": 250.0,
+                    "night_halt": 500.0
+                }
+            
+            rates = nested_rates
+        else:
+            rates = raw_rates
         
         # Write to rates_history version doc
         db.collection("rates_history").document(version_id).set({
@@ -112,7 +181,7 @@ async def update_rates(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save rates: {str(e)}"
+            detail=f"Failed to update rates: {str(e)}"
         )
 
 # ==========================================
