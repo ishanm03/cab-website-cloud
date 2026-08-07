@@ -17,7 +17,8 @@ try:
         else:
             # Fallback to Application Default Credentials (ADC) or environmental defaults
             print("SethCabs Backend: Initializing Firebase Admin SDK via default service account credentials.")
-            firebase_app = firebase_admin.initialize_app()
+            project_id = getattr(settings, "PROJECT_ID", None) or os.getenv("GOOGLE_CLOUD_PROJECT") or "ishancabproject"
+            firebase_app = firebase_admin.initialize_app(options={"projectId": project_id})
     else:
         firebase_app = firebase_admin.get_app()
         

@@ -33,10 +33,14 @@ async def get_current_user(
         # This checks token signature, expiration, and audience parameters
         decoded_claims = firebase_auth.verify_id_token(token)
         
+        user_email = (decoded_claims.get("email") or "").strip().lower()
+        super_admin_list = [e.strip().lower() for e in settings.SUPER_ADMIN_EMAILS]
+        is_admin = (decoded_claims.get("admin") is True) or (bool(user_email) and user_email in super_admin_list)
+        
         return AuthenticatedUser(
             uid=decoded_claims.get("uid"),
             email=decoded_claims.get("email"),
-            admin=decoded_claims.get("admin") is True
+            admin=is_admin
         )
     except firebase_auth.ExpiredIdTokenError:
         raise HTTPException(
