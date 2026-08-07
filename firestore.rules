@@ -2,6 +2,14 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.admin == true || 
+        request.auth.token.email == 'admin@ishancabs.com' || 
+        request.auth.token.email == 'admin@sethcabs.com'
+      );
+    }
+
     // Public Catalogs: Anyone can read pricing and location metadata
     match /settings/rates { 
       allow read: if true; 
@@ -22,23 +30,23 @@ service cloud.firestore {
 
     // User Profiles: Users read own profile; Admins can read all profiles
     match /users/{userId} {
-      allow read: if request.auth != null && (request.auth.uid == userId || request.auth.token.admin == true);
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow write: if false; // ALL WRITES VIA FASTAPI BACKEND
     }
 
     // Bookings: Customers read own rides; Admins read all rides
     match /bookings/{bookingId} {
-      allow read: if request.auth != null && (resource.data.customer_id == request.auth.uid || request.auth.token.admin == true);
+      allow read: if request.auth != null && (resource.data.customer_id == request.auth.uid || isAdmin());
       allow write: if false; // ALL WRITES VIA FASTAPI BACKEND
     }
 
     // Fleet & Drivers: Admins only
     match /vehicles/{vehicleId} {
-      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow read: if isAdmin();
       allow write: if false; // ALL WRITES VIA FASTAPI BACKEND
     }
     match /drivers/{driverId} {
-      allow read: if request.auth != null && request.auth.token.admin == true;
+      allow read: if isAdmin();
       allow write: if false; // ALL WRITES VIA FASTAPI BACKEND
     }
 
