@@ -960,7 +960,6 @@ function renderBookings() {
         });
     }
 }
-}
 
 // Bind action click controllers
 function bindCardActionButtonEvents(container = document) {
