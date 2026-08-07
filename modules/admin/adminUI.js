@@ -633,8 +633,23 @@ function renderBookings() {
             const promo = fareDetails.promo_code;
             const kmVal = fareDetails.estimated_km || 0;
 
+            const breakdown = fareDetails.breakdown;
             let amountHtml = `${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-`;
-            if (discount > 0) {
+            if (breakdown) {
+                const parts = [];
+                if (typeof breakdown.base_fare === "number" && breakdown.base_fare > 0) parts.push(`Base: ₹${breakdown.base_fare}`);
+                if (typeof breakdown.extra_km_charge === "number" && breakdown.extra_km_charge > 0) parts.push(`Extra KM: ₹${breakdown.extra_km_charge}`);
+                if (typeof breakdown.extra_hour_charge === "number" && breakdown.extra_hour_charge > 0) parts.push(`Extra Hrs: ₹${breakdown.extra_hour_charge}`);
+                if (typeof breakdown.night_charge === "number" && breakdown.night_charge > 0) parts.push(`Night fee: ₹${breakdown.night_charge}`);
+                if (typeof breakdown.driver_allowance === "number" && breakdown.driver_allowance > 0) parts.push(`Driver allowance: ₹${breakdown.driver_allowance}`);
+                if (typeof breakdown.night_halt === "number" && breakdown.night_halt > 0) parts.push(`Halt: ₹${breakdown.night_halt}`);
+                if (typeof breakdown.discount === "number" && breakdown.discount > 0) parts.push(`Promo: -₹${breakdown.discount}`);
+                
+                amountHtml = `
+                    <span class="block">${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-</span>
+                    <span class="text-[9px] text-slate-400 font-normal block mt-0.5 leading-tight">${parts.join(" | ")}</span>
+                `;
+            } else if (discount > 0) {
                 amountHtml = `
                     <span class="block">${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-</span>
                     <span class="text-[9px] text-slate-400 font-normal block mt-0.5 leading-tight">Base: ₹${baseFare.toLocaleString("en-IN")} | Promo: ${promo} (-₹${discount.toLocaleString("en-IN")})</span>

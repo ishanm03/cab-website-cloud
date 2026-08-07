@@ -1007,7 +1007,8 @@ async function handleFinalConfirm() {
                 discount_amount: quote.discount_amount,
                 promo_code: quote.promo_code,
                 estimated_fare: quote.estimated_fare,
-                rates_version_id: activeRatesVersionId
+                rates_version_id: activeRatesVersionId,
+                breakdown: quote.breakdown
             },
             quote_signature: quote.signature,
             quote_id: quote.quote_id,

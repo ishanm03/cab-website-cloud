@@ -36,7 +36,7 @@ def is_night_time(time_str: str, start_str: str = "23:59", end_str: str = "06:00
     except Exception:
         return False
 
-def calculate_fare(
+def calculate_fare_breakdown(
     ride_type: str, 
     distance: float, 
     days: Optional[int], 
@@ -45,7 +45,7 @@ def calculate_fare(
     time_string: str,
     active_rates: Optional[dict], 
     flat_metrics: Optional[dict] = None
-) -> float:
+) -> dict:
     actual_days = max(1, days or 1)
     actual_distance = float(distance or 0.0)
     actual_hours = max(1, hours or 1)
@@ -83,22 +83,38 @@ def calculate_fare(
         discount = float(config.get("default_discount", 0.0))
         
         subtotal = base_fare + extra_km_charge + extra_hour_charge + night_charge - discount
-        return float(max(0.0, round(subtotal)))
+        return {
+            "base_fare": base_fare,
+            "extra_km_charge": extra_km_charge,
+            "extra_hour_charge": extra_hour_charge,
+            "night_charge": night_charge,
+            "driver_allowance": 0.0,
+            "night_halt": 0.0,
+            "discount": discount,
+            "total": float(max(0.0, round(subtotal)))
+        }
 
     # 2. Flat routes matrix override (Local or Intercity)
     if (ride_type == "local" or ride_type == "intercity") and flat_metrics:
         if tier == "compact":
             val = flat_metrics.get("base_fare_compact") or round((flat_metrics.get("base_fare_premium") or flat_metrics.get("base_fare_sedan") or 999) * 0.85)
-            return float(val)
-        if tier == "premium":
+        elif tier == "premium":
             val = flat_metrics.get("base_fare_premium") or flat_metrics.get("base_fare_sedan") or 999
-            return float(val)
-        if tier == "suv":
+        elif tier == "suv":
             val = flat_metrics.get("base_fare_suv") or 1000
-            return float(val)
-        if tier == "muv":
+        else:
             val = flat_metrics.get("base_fare_muv") or round((flat_metrics.get("base_fare_suv") or 1000) * 1.25)
-            return float(val)
+        
+        return {
+            "base_fare": float(val),
+            "extra_km_charge": 0.0,
+            "extra_hour_charge": 0.0,
+            "night_charge": 0.0,
+            "driver_allowance": 0.0,
+            "night_halt": 0.0,
+            "discount": 0.0,
+            "total": float(val)
+        }
 
     # 3. Intercity Outstation (Round-Trip pricing)
     if ride_type == "outstation":
@@ -119,7 +135,16 @@ def calculate_fare(
         night_halt = float(config.get("night_halt", 0.0)) * max(0, actual_days - 1)
         
         total = base_fare + driver_allowance + night_halt
-        return float(round(total))
+        return {
+            "base_fare": base_fare,
+            "extra_km_charge": 0.0,
+            "extra_hour_charge": 0.0,
+            "night_charge": 0.0,
+            "driver_allowance": driver_allowance,
+            "night_halt": night_halt,
+            "discount": 0.0,
+            "total": float(round(total))
+        }
         
     # 4. Fallback Local Ride pricing
     else:
@@ -136,7 +161,38 @@ def calculate_fare(
         night_charge = float(config.get("night_charge", 0.0)) if night_applies else 0.0
         
         total = base_fare + extra_km_charge + night_charge
-        return float(round(total))
+        return {
+            "base_fare": base_fare,
+            "extra_km_charge": extra_km_charge,
+            "extra_hour_charge": 0.0,
+            "night_charge": night_charge,
+            "driver_allowance": 0.0,
+            "night_halt": 0.0,
+            "discount": 0.0,
+            "total": float(round(total))
+        }
+
+def calculate_fare(
+    ride_type: str, 
+    distance: float, 
+    days: Optional[int], 
+    tier: str, 
+    hours: Optional[int], 
+    time_string: str,
+    active_rates: Optional[dict], 
+    flat_metrics: Optional[dict] = None
+) -> float:
+    breakdown = calculate_fare_breakdown(
+        ride_type=ride_type,
+        distance=distance,
+        days=days,
+        tier=tier,
+        hours=hours,
+        time_string=time_string,
+        active_rates=active_rates,
+        flat_metrics=flat_metrics
+    )
+    return breakdown["total"]
 
 def compute_hmac_signature(
     quote_id: str, 
@@ -266,8 +322,8 @@ async def estimate_quote(
                     "base_fare_muv": flat_data.get("fares", {}).get("muv")
                 }
 
-        # Calculate base fare
-        base_fare = calculate_fare(
+        # Calculate base fare and breakdown
+        breakdown = calculate_fare_breakdown(
             ride_type=request.category,
             distance=request.km,
             days=request.days,
@@ -277,6 +333,7 @@ async def estimate_quote(
             active_rates=active_rates,
             flat_metrics=flat_metrics
         )
+        base_fare = breakdown["total"]
 
         # Validate and apply promo code
         discount = 0.0
@@ -294,6 +351,10 @@ async def estimate_quote(
                     discount = min(discount, base_fare)
 
         estimated_fare = base_fare - discount
+        # Update breakdown total with discount applied
+        breakdown["discount"] = discount
+        breakdown["total"] = estimated_fare
+
         quote_id = f"QT-{int(datetime.now(timezone.utc).timestamp())}-{uuid.uuid4().hex[:4].upper()}"
         expires_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
 
@@ -315,7 +376,8 @@ async def estimate_quote(
             estimated_fare=estimated_fare,
             promo_code=request.promo_code or None,
             signature=sig,
-            expires_at=expires_at
+            expires_at=expires_at,
+            breakdown=breakdown
         )
     except Exception as e:
         raise HTTPException(
@@ -408,7 +470,8 @@ async def create_booking(
                 "promo_code": request.fare_details.get("promo_code"),
                 "estimated_fare": request.fare_details.get("estimated_fare"),
                 "rates_version_id": request.fare_details.get("rates_version_id"),
-                "quote_id": request.quote_id
+                "quote_id": request.quote_id,
+                "breakdown": request.fare_details.get("breakdown")
             },
             "creation_ts": SERVER_TIMESTAMP,
             "updated_ts": SERVER_TIMESTAMP

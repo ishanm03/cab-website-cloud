@@ -137,6 +137,7 @@ class QuoteEstimateResponse(BaseModel):
     promo_code: Optional[str] = None
     signature: str
     expires_at: str
+    breakdown: Optional[Dict[str, Any]] = None
 
 class BookingCreateRequest(BaseModel):
     trip_details: Dict[str, Any]
