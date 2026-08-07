@@ -18,50 +18,21 @@ async def get_rates():
     """
     Fetch the dynamic rates configuration for all vehicle tiers.
     """
-    default_nested_rates = {
-        "rates": {
-            "local": {
-                "compact": { "base_fare": 550.0, "extra_km_rate": 12.0, "waiting_rate": 3.0, "night_charge": 200.0 },
-                "premium": { "base_fare": 650.0, "extra_km_rate": 13.0, "waiting_rate": 4.0, "night_charge": 300.0 },
-                "suv":     { "base_fare": 750.0, "extra_km_rate": 14.0, "waiting_rate": 5.0, "night_charge": 400.0 },
-                "muv":     { "base_fare": 850.0, "extra_km_rate": 15.0, "waiting_rate": 5.0, "night_charge": 500.0 }
-            },
-            "rental": {
-                "compact": { "base_fare": 2300.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 12.0, "extra_hour_rate": 180.0, "night_charge": 200.0, "default_discount": 500.0 },
-                "premium": { "base_fare": 2500.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 13.0, "extra_hour_rate": 240.0, "night_charge": 300.0, "default_discount": 500.0 },
-                "suv":     { "base_fare": 2800.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 14.0, "extra_hour_rate": 300.0, "night_charge": 400.0, "default_discount": 500.0 },
-                "muv":     { "base_fare": 3300.0, "included_hours": 6, "included_km": 60, "extra_km_rate": 16.0, "extra_hour_rate": 360.0, "night_charge": 500.0, "default_discount": 500.0 }
-            },
-            "intercity": {
-                "compact": { "rate_per_km": 12.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
-                "premium": { "rate_per_km": 14.0, "driver_allowance": 600.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
-                "suv":     { "rate_per_km": 18.0, "driver_allowance": 800.0, "min_km_per_day": 250.0, "night_halt": 500.0 },
-                "muv":     { "rate_per_km": 22.0, "driver_allowance": 800.0, "min_km_per_day": 250.0, "night_halt": 500.0 }
-            },
-            "global": {
-                "night_charge_start": "23:59",
-                "night_charge_end": "06:00"
-            }
-        },
-        "default_fleet_sizes": {
-            "compact": 5,
-            "premium": 5,
-            "suv": 3,
-            "muv": 2
-        },
-        "active_version_id": "seed-v1"
-    }
-
     if db is None:
-        return default_nested_rates
-        
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database offline."
+        )
     try:
         rates_doc = db.collection("settings").document("rates").get()
         if not rates_doc.exists:
-            db.collection("settings").document("rates").set(default_nested_rates)
-            return default_nested_rates
-            
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Rates configuration not found in database."
+            )
         return rates_doc.to_dict()
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

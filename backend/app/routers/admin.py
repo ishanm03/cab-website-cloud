@@ -422,21 +422,13 @@ async def sync_schemas(current_user: AuthenticatedUser = Depends(require_admin))
             if "address" not in data:
                 doc_snap.reference.update({"address": "Kolkata City Depot"})
                 
-        # 3. Check settings/rates and migrate legacy flat keys to nested structure
+        # 3. Check settings/rates and migrate legacy 'sedan' key to 'premium'
         rates_ref = db.collection("settings").document("rates")
         rates_snap = rates_ref.get()
         if rates_snap.exists:
             rates_data = rates_snap.to_dict()
             rates = rates_data.get("rates", {})
-            # If rates is flat (legacy), overwrite it with correct nested seed rates
-            if "local" not in rates:
-                rates_ref.set({
-                    "rates": seed_data["rates"],
-                    "default_fleet_sizes": seed_data["default_fleet_sizes"],
-                    "active_version_id": "seed-v1",
-                    "updated_ts": SERVER_TIMESTAMP
-                })
-            else:
+            if isinstance(rates, dict) and "local" in rates:
                 rates_need_update = False
                 if "sedan" in rates.get("local", {}) and "premium" not in rates.get("local", {}):
                     rates["local"]["premium"] = rates["local"]["sedan"]
@@ -444,18 +436,6 @@ async def sync_schemas(current_user: AuthenticatedUser = Depends(require_admin))
                     rates_need_update = True
                 if rates_need_update:
                     rates_ref.update({"rates": rates})
-        else:
-            # Seed default rates and fleet sizes from JSON
-            rates_ref.set({
-                "rates": seed_data["rates"],
-                "default_fleet_sizes": seed_data["default_fleet_sizes"],
-                "active_version_id": "seed-v1",
-                "updated_ts": SERVER_TIMESTAMP
-            })
-            db.collection("rates_history").document("seed-v1").set({
-                "rates": seed_data["rates"],
-                "creation_ts": SERVER_TIMESTAMP
-            })
                 
         # 4. Seed Predefined Locations if empty
         locations_ref = db.collection("locations")
