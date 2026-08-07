@@ -368,10 +368,7 @@ function startBookingsSnapshotListener() {
     }
 
     try {
-        const bookingsQuery = query(
-            collection(db, "bookings"),
-            orderBy("creation_ts", "desc")
-        );
+        const bookingsQuery = query(collection(db, "bookings"));
 
         firestoreUnsubscribe = onSnapshot(bookingsQuery, (snapshot) => {
             bookingsData = [];
@@ -380,6 +377,17 @@ function startBookingsSnapshotListener() {
                     id: doc.id,
                     ...doc.data()
                 });
+            });
+
+            // Perform safe in-memory descending sort based on creation_ts
+            bookingsData.sort((a, b) => {
+                const getTs = (item) => {
+                    if (!item.creation_ts) return 0;
+                    if (typeof item.creation_ts === "object" && item.creation_ts.seconds) return item.creation_ts.seconds;
+                    if (typeof item.creation_ts === "string") return new Date(item.creation_ts).getTime() / 1000;
+                    return 0;
+                };
+                return getTs(b) - getTs(a);
             });
 
             utils.hideElement(adminLoader);
@@ -490,9 +498,9 @@ function handleRosterSelectionChange() {
 // Accumulate status counts and update dashboard metrics cards
 function updateStatsCounters() {
     let total = bookingsData.length;
-    let requested = bookingsData.filter(b => b.status === "pending_approval").length;
+    let requested = bookingsData.filter(b => b.status === "pending_approval" || b.status === "pending" || b.status === "requested").length;
     let confirmed = bookingsData.filter(b => b.status === "confirmed").length;
-    let ongoing = bookingsData.filter(b => b.status === "active").length;
+    let ongoing = bookingsData.filter(b => b.status === "active" || b.status === "ongoing").length;
     let completed = bookingsData.filter(b => b.status === "completed").length;
 
     statTotal.textContent = total;
@@ -536,10 +544,21 @@ function renderBookings() {
     bookingsListContainer.innerHTML = "";
     utils.hideElement(adminAlert);
 
-    // Apply Filter rules
+    // Apply Filter rules supporting legacy status aliases
     const filteredBookings = currentStatusFilter === "all" 
         ? bookingsData 
-        : bookingsData.filter(b => b.status === currentStatusFilter);
+        : bookingsData.filter(b => {
+            if (currentStatusFilter === "pending_approval") {
+                return b.status === "pending_approval" || b.status === "pending" || b.status === "requested";
+            }
+            if (currentStatusFilter === "active") {
+                return b.status === "active" || b.status === "ongoing";
+            }
+            if (currentStatusFilter === "rejected") {
+                return b.status === "rejected" || b.status === "cancelled";
+            }
+            return b.status === currentStatusFilter;
+        });
 
     if (filteredBookings.length === 0) {
         utils.hideElement(bookingsListContainer);
