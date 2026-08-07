@@ -570,196 +570,215 @@ function renderBookings() {
     utils.showElement(bookingsListContainer);
 
     filteredBookings.forEach(booking => {
-        const card = document.createElement("div");
-        card.className = "admin-card p-6 rounded-3xl border border-slate-800/80 hover:border-slate-700/80 transition-all duration-300 flex flex-col justify-between";
+        try {
+            const card = document.createElement("div");
+            card.className = "admin-card p-6 rounded-3xl border border-slate-800/80 hover:border-slate-700/80 transition-all duration-300 flex flex-col justify-between";
 
-        // Style status badges cleanly
-        let statusText = "Requested";
-        let badgeClass = "bg-amber-500/10 border-amber-500/20 text-amber-400";
-        if (booking.status === "confirmed") {
-            statusText = "Confirmed";
-            badgeClass = "bg-blue-500/10 border-blue-500/20 text-blue-400";
-        } else if (booking.status === "active") {
-            statusText = `<span class="inline-flex items-center"><span class="relative flex h-2 w-2 mr-1.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>On-Going</span>`;
-            badgeClass = "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
-        } else if (booking.status === "completed") {
-            statusText = "Completed";
-            badgeClass = "bg-slate-800/80 border-slate-700/60 text-slate-400";
-        } else if (booking.status === "rejected") {
-            statusText = "Rejected";
-            badgeClass = "bg-rose-500/10 border-rose-500/20 text-rose-400";
-        }
+            const tripDetails = booking.trip_details || {};
+            const fareDetails = booking.fare_details || {};
+            const custDetails = booking.customer_details || {};
+            const driverAssignment = booking.driver_assignment || null;
+            const bStatus = booking.status || "pending_approval";
+            const isRequestedStatus = (bStatus === "pending_approval" || bStatus === "pending" || bStatus === "requested");
 
-        // Style booking channel badges cleanly
-        let channelText = "Website";
-        let channelClass = "bg-sky-500/10 border-sky-500/20 text-sky-400";
-        if (booking.booking_channel === "call") {
-            channelText = "📞 Call";
-            channelClass = "bg-amber-500/10 border-amber-500/20 text-amber-400";
-        } else if (booking.booking_channel === "whatsapp") {
-            channelText = "💬 WhatsApp";
-            channelClass = "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
-        }
+            // Style status badges cleanly
+            let statusText = "Requested";
+            let badgeClass = "bg-amber-500/10 border-amber-500/20 text-amber-400";
+            if (bStatus === "confirmed") {
+                statusText = "Confirmed";
+                badgeClass = "bg-blue-500/10 border-blue-500/20 text-blue-400";
+            } else if (bStatus === "active" || bStatus === "ongoing") {
+                statusText = `<span class="inline-flex items-center"><span class="relative flex h-2 w-2 mr-1.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>On-Going</span>`;
+                badgeClass = "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
+            } else if (bStatus === "completed") {
+                statusText = "Completed";
+                badgeClass = "bg-slate-800/80 border-slate-700/60 text-slate-400";
+            } else if (bStatus === "rejected" || bStatus === "cancelled") {
+                statusText = "Rejected";
+                badgeClass = "bg-rose-500/10 border-rose-500/20 text-rose-400";
+            }
 
-        const dateStr = booking.trip_details.pickup_date || "--";
-        const timeStr = booking.trip_details.pickup_time || "--";
-        const creationDate = booking.creation_ts ? new Date(booking.creation_ts.seconds * 1000).toLocaleString() : "Recently Added";
+            // Style booking channel badges cleanly
+            let channelText = "Website";
+            let channelClass = "bg-sky-500/10 border-sky-500/20 text-sky-400";
+            if (booking.booking_channel === "call") {
+                channelText = "📞 Call";
+                channelClass = "bg-amber-500/10 border-amber-500/20 text-amber-400";
+            } else if (booking.booking_channel === "whatsapp") {
+                channelText = "💬 WhatsApp";
+                channelClass = "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
+            }
 
-        // Compute fare details with discounts/promos
-        const finalFare = booking.fare_details.estimated_fare;
-        const baseFare = typeof booking.fare_details.base_fare === "number" ? booking.fare_details.base_fare : finalFare;
-        const discount = booking.fare_details.discount_amount || 0;
-        const promo = booking.fare_details.promo_code;
+            const dateStr = tripDetails.pickup_date || "--";
+            const timeStr = tripDetails.pickup_time || "--";
+            const creationDate = booking.creation_ts 
+                ? (booking.creation_ts.seconds ? new Date(booking.creation_ts.seconds * 1000).toLocaleString() : new Date(booking.creation_ts).toLocaleString())
+                : "Recently Added";
 
-        let amountHtml = `${booking.fare_details.estimated_km} km • ₹${finalFare.toLocaleString("en-IN")}/-`;
-        if (discount > 0) {
-            amountHtml = `
-                <span class="block">${booking.fare_details.estimated_km} km • ₹${finalFare.toLocaleString("en-IN")}/-</span>
-                <span class="text-[9px] text-slate-400 font-normal block mt-0.5 leading-tight">Base: ₹${baseFare.toLocaleString("en-IN")} | Promo: ${promo} (-₹${discount.toLocaleString("en-IN")})</span>
-            `;
-        }
+            // Compute fare details with discounts/promos
+            const finalFare = typeof fareDetails.estimated_fare === "number" ? fareDetails.estimated_fare : 0;
+            const baseFare = typeof fareDetails.base_fare === "number" ? fareDetails.base_fare : finalFare;
+            const discount = fareDetails.discount_amount || 0;
+            const promo = fareDetails.promo_code;
+            const kmVal = fareDetails.estimated_km || 0;
 
-        // HTML code structure for each card
-        card.innerHTML = `
-            <div class="space-y-4">
-                <!-- Card Header -->
-                <div class="flex justify-between items-start border-b border-slate-800 pb-3">
-                    <div>
-                        <span class="text-[10px] font-black text-slate-500 tracking-wider block uppercase">Booking ID</span>
-                        <div class="flex items-center gap-2 mt-0.5">
-                            <h4 class="font-bold text-white text-sm tracking-wide">${booking.booking_id}</h4>
-                            <span class="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wider border ${channelClass}">
-                                ${channelText}
-                            </span>
-                        </div>
-                    </div>
-                    <span class="border px-2.5 py-1 rounded-xl text-xs font-bold ${badgeClass}">
-                        ${statusText}
-                    </span>
-                </div>
+            let amountHtml = `${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-`;
+            if (discount > 0) {
+                amountHtml = `
+                    <span class="block">${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-</span>
+                    <span class="text-[9px] text-slate-400 font-normal block mt-0.5 leading-tight">Base: ₹${baseFare.toLocaleString("en-IN")} | Promo: ${promo} (-₹${discount.toLocaleString("en-IN")})</span>
+                `;
+            }
 
-                <!-- Trip Routing Details -->
-                <div class="grid grid-cols-2 gap-4 text-xs">
-                    <div>
-                        <span class="text-slate-500 block">Pickup Location</span>
-                        <span class="font-semibold text-slate-200 block mt-0.5">${booking.trip_details.pickup_location}</span>
-                    </div>
-                    <div>
-                        <span class="text-slate-500 block">Destination</span>
-                        <span class="font-semibold text-slate-200 block mt-0.5">${booking.trip_details.drop_location}</span>
-                    </div>
-                </div>
+            const pickupLoc = tripDetails.pickup_location || "Not specified";
+            const dropLoc = tripDetails.drop_location || "Not specified";
+            const vehicleTier = fareDetails.vehicle_tier || "standard";
+            const rideType = tripDetails.ride_type || "local";
+            const custName = custDetails.name || booking.customer_id || "Rider";
+            const custPhone = custDetails.phone || "N/A";
+            const bookingIdStr = booking.booking_id || booking.id || "N/A";
 
-                <!-- Timings & Category -->
-                <div class="grid grid-cols-3 gap-2 text-xs border-y border-slate-800/50 py-3">
-                    <div>
-                        <span class="text-[10px] text-slate-500 block">Pickup Timing</span>
-                        <span class="font-semibold text-slate-300 block mt-0.5">${dateStr} ${timeStr}</span>
-                    </div>
-                    <div>
-                        <span class="text-[10px] text-slate-500 block">Tier / Mode</span>
-                        <span class="font-semibold text-slate-300 block mt-0.5 uppercase">${booking.fare_details.vehicle_tier} (${booking.trip_details.ride_type})</span>
-                    </div>
-                    <div>
-                        <span class="text-[10px] text-slate-500 block">KM & Amount</span>
-                        <span class="font-semibold text-amber-500 block mt-0.5">${amountHtml}</span>
-                    </div>
-                </div>
-
-                <!-- Rider Info -->
-                <div class="text-xs space-y-1">
-                    <span class="text-[10px] font-bold text-slate-500 tracking-wider block uppercase">Passenger Details</span>
-                    <p class="font-medium text-slate-200">${booking.customer_details.name} • <a href="tel:${booking.customer_details.phone}" class="text-amber-400 hover:underline font-bold">${booking.customer_details.phone}</a></p>
-                </div>
-
-                <!-- Driver Allocation Panel -->
-                ${(booking.status === "confirmed" || booking.status === "active" || booking.status === "completed") && booking.driver_assignment ? `
-                <div class="bg-slate-950/60 border border-slate-800/60 p-3 rounded-2xl text-xs mt-3">
-                    <span class="text-[10px] font-bold text-slate-500 tracking-wider block uppercase mb-1.5">Assigned Fleet</span>
-                    <div class="grid grid-cols-2 gap-2 text-slate-300">
+            // HTML code structure for each card
+            card.innerHTML = `
+                <div class="space-y-4">
+                    <!-- Card Header -->
+                    <div class="flex justify-between items-start border-b border-slate-800 pb-3">
                         <div>
-                            <span class="text-slate-500 block text-[10px]">Driver</span>
-                            <span class="font-bold">${booking.driver_assignment.driver_name}</span>
+                            <span class="text-[10px] font-black text-slate-500 tracking-wider block uppercase">Booking ID</span>
+                            <div class="flex items-center gap-2 mt-0.5">
+                                <h4 class="font-bold text-white text-sm tracking-wide">${bookingIdStr}</h4>
+                                <span class="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wider border ${channelClass}">
+                                    ${channelText}
+                                </span>
+                            </div>
+                        </div>
+                        <span class="border px-2.5 py-1 rounded-xl text-xs font-bold ${badgeClass}">
+                            ${statusText}
+                        </span>
+                    </div>
+
+                    <!-- Trip Routing Details -->
+                    <div class="grid grid-cols-2 gap-4 text-xs">
+                        <div>
+                            <span class="text-slate-500 block">Pickup Location</span>
+                            <span class="font-semibold text-slate-200 block mt-0.5">${pickupLoc}</span>
                         </div>
                         <div>
-                            <span class="text-slate-500 block text-[10px]">Vehicle Plate</span>
-                            <span class="font-bold text-amber-400 uppercase">${booking.driver_assignment.vehicle_number}</span>
+                            <span class="text-slate-500 block">Destination</span>
+                            <span class="font-semibold text-slate-200 block mt-0.5">${dropLoc}</span>
                         </div>
                     </div>
-                </div>
-                ` : ""}
 
-                <!-- Rejection Details -->
-                ${booking.status === "rejected" && booking.rejection_reason ? `
-                <div class="bg-rose-950/10 border border-rose-500/10 p-3 rounded-2xl text-xs mt-3">
-                    <span class="text-[10px] font-bold text-rose-400 tracking-wider block uppercase mb-0.5">Rejection Reason</span>
-                    <p class="text-rose-300 leading-relaxed">${booking.rejection_reason}</p>
-                </div>
-                ` : ""}
-
-                <!-- Rating Review Panel (If Completed and feedback is present) -->
-                ${booking.status === "completed" && booking.feedback ? `
-                <div class="bg-slate-900/40 border border-slate-800/60 p-3 rounded-2xl text-xs mt-3">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-[10px] font-bold text-amber-400 tracking-wider uppercase">User Feedback</span>
-                        <div class="flex text-amber-500 gap-0.5">
-                            ${Array.from({ length: 5 }, (_, i) => `
-                                <svg class="w-3 h-3 ${i < booking.feedback.rating ? "fill-current" : "stroke-current text-slate-600 fill-none"}" viewBox="0 0 20 20">
-                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
-                            `).join("")}
+                    <!-- Timings & Category -->
+                    <div class="grid grid-cols-3 gap-2 text-xs border-y border-slate-800/50 py-3">
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">Pickup Timing</span>
+                            <span class="font-semibold text-slate-300 block mt-0.5">${dateStr} ${timeStr}</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">Tier / Mode</span>
+                            <span class="font-semibold text-slate-300 block mt-0.5 uppercase">${vehicleTier} (${rideType})</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">KM & Amount</span>
+                            <span class="font-semibold text-amber-500 block mt-0.5">${amountHtml}</span>
                         </div>
                     </div>
-                    <p class="text-slate-300 italic">"${booking.feedback.comments || "No comments written."}"</p>
+
+                    <!-- Rider Info -->
+                    <div class="text-xs space-y-1">
+                        <span class="text-[10px] font-bold text-slate-500 tracking-wider block uppercase">Passenger Details</span>
+                        <p class="font-medium text-slate-200">${custName} • <a href="tel:${custPhone}" class="text-amber-400 hover:underline font-bold">${custPhone}</a></p>
+                    </div>
+
+                    <!-- Driver Allocation Panel -->
+                    ${(bStatus === "confirmed" || bStatus === "active" || bStatus === "completed") && driverAssignment ? `
+                    <div class="bg-slate-950/60 border border-slate-800/60 p-3 rounded-2xl text-xs mt-3">
+                        <span class="text-[10px] font-bold text-slate-500 tracking-wider block uppercase mb-1.5">Assigned Fleet</span>
+                        <div class="grid grid-cols-2 gap-2 text-slate-300">
+                            <div>
+                                <span class="text-slate-500 block text-[10px]">Driver</span>
+                                <span class="font-bold">${driverAssignment.driver_name || "Assigned"}</span>
+                            </div>
+                            <div>
+                                <span class="text-slate-500 block text-[10px]">Vehicle Plate</span>
+                                <span class="font-bold text-amber-400 uppercase">${driverAssignment.vehicle_number || "N/A"}</span>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ""}
+
+                    <!-- Rejection Details -->
+                    ${(bStatus === "rejected" || bStatus === "cancelled") && booking.rejection_reason ? `
+                    <div class="bg-rose-950/10 border border-rose-500/10 p-3 rounded-2xl text-xs mt-3">
+                        <span class="text-[10px] font-bold text-rose-400 tracking-wider block uppercase mb-0.5">Rejection Reason</span>
+                        <p class="text-rose-300 leading-relaxed">${booking.rejection_reason}</p>
+                    </div>
+                    ` : ""}
+
+                    <!-- Rating Review Panel (If Completed and feedback is present) -->
+                    ${bStatus === "completed" && booking.feedback ? `
+                    <div class="bg-slate-900/40 border border-slate-800/60 p-3 rounded-2xl text-xs mt-3">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[10px] font-bold text-amber-400 tracking-wider uppercase">User Feedback</span>
+                            <div class="flex text-amber-500 gap-0.5">
+                                ${Array.from({ length: 5 }, (_, i) => `
+                                    <svg class="w-3 h-3 ${i < booking.feedback.rating ? "fill-current" : "stroke-current text-slate-600 fill-none"}" viewBox="0 0 20 20">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                    </svg>
+                                `).join("")}
+                            </div>
+                        </div>
+                        <p class="text-slate-300 italic">"${booking.feedback.comments || "No comments written."}"</p>
+                    </div>
+                    ` : ""}
+
+                    <!-- Route Map Preview -->
+                    <div id="map-admin-${booking.id}" class="h-40 w-full mt-3 rounded-2xl border border-slate-800/80 overflow-hidden relative z-10"></div>
                 </div>
-                ` : ""}
 
-                <!-- Route Map Preview -->
-                <div id="map-admin-${booking.id}" class="h-40 w-full mt-3 rounded-2xl border border-slate-800/80 overflow-hidden relative z-10"></div>
-            </div>
+                <!-- Action Controllers Panel -->
+                <div class="mt-6 border-t border-slate-800/60 pt-4 flex gap-3">
+                    ${isRequestedStatus ? `
+                        <button type="button" class="btn-approve flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-emerald-500/10" data-id="${booking.id}">
+                            Accept Ride
+                        </button>
+                        <button type="button" class="btn-reject flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-rose-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
+                            Reject
+                        </button>
+                        <button type="button" class="btn-text-rider flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
+                            Text Rider
+                        </button>
+                    ` : ""}
 
-            <!-- Action Controllers Panel -->
-            <div class="mt-6 border-t border-slate-800/60 pt-4 flex gap-3">
-                ${booking.status === "pending_approval" ? `
-                    <button type="button" class="btn-approve flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-emerald-500/10" data-id="${booking.id}">
-                        Accept Ride
-                    </button>
-                    <button type="button" class="btn-reject flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-rose-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
-                        Reject
-                    </button>
-                    <button type="button" class="btn-text-rider flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
-                        Text Rider
-                    </button>
-                ` : ""}
-
-                ${booking.status === "confirmed" ? (() => {
-                    const pickupDate = booking.trip_details.pickup_date;
-                    const pickupTime = booking.trip_details.pickup_time;
-                    let hasPassed = true;
-                    if (pickupDate && pickupTime) {
-                        const pickupDateTime = new Date(`${pickupDate}T${pickupTime}`);
-                        if (!isNaN(pickupDateTime.getTime())) {
-                            hasPassed = new Date() >= pickupDateTime;
+                    ${bStatus === "confirmed" ? (() => {
+                        const pickupDate = tripDetails.pickup_date;
+                        const pickupTime = tripDetails.pickup_time;
+                        let hasPassed = true;
+                        if (pickupDate && pickupTime) {
+                            const pickupDateTime = new Date(`${pickupDate}T${pickupTime}`);
+                            if (!isNaN(pickupDateTime.getTime())) {
+                                hasPassed = new Date() >= pickupDateTime;
+                            }
                         }
-                    }
-                    return `
-                        <button type="button" 
-                            class="btn-start flex-1 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md ${
-                                hasPassed 
-                                ? "bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/10 cursor-pointer" 
-                                : "bg-slate-900 text-slate-600 border border-slate-800/80 cursor-not-allowed"
-                            }" 
-                            data-id="${booking.id}"
-                            ${hasPassed ? "" : "disabled"}
-                            title="${hasPassed ? "Click to start the ride" : "Ride cannot be started before the pickup time"}"
-                        >
-                            ${hasPassed ? "Start Ride" : "Start Ride (Locked)"}
-                        </button>
-                        <button type="button" class="btn-approve flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200" data-id="${booking.id}">
-                            Reassign Driver
-                        </button>
-                    `;
-                })() : ""}
+                        return `
+                            <button type="button" 
+                                class="btn-start flex-1 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md ${
+                                    hasPassed 
+                                    ? "bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/10 cursor-pointer" 
+                                    : "bg-slate-900 text-slate-600 border border-slate-800/80 cursor-not-allowed"
+                                }" 
+                                data-id="${booking.id}"
+                                ${hasPassed ? "" : "disabled"}
+                                title="${hasPassed ? "Click to start the ride" : "Ride cannot be started before the pickup time"}"
+                            >
+                                ${hasPassed ? "Start Ride" : "Start Ride (Locked)"}
+                            </button>
+                            <button type="button" class="btn-approve flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200" data-id="${booking.id}">
+                                Reassign Driver
+                            </button>
+                        `;
+                    })() : ""}
 
                 ${booking.status === "active" ? `
                     <button type="button" class="btn-complete flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-amber-500/10" data-id="${booking.id}">
