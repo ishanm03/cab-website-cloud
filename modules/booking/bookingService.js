@@ -71,6 +71,19 @@ const bookingService = {
 
         const nightApplies = isNightTime(timeString);
 
+        console.log("IshanCabs calculateFare:", {
+            rideType,
+            distance,
+            days,
+            tier,
+            hours,
+            timeString,
+            nightApplies,
+            nightStart,
+            nightEnd,
+            rates
+        });
+
         // 1. Hourly rental calculations
         if (rideType === "rental") {
             const baseFare = parseFloat(config.base_fare) || 0;
