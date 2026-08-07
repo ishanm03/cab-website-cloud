@@ -799,7 +799,10 @@ function renderBookings() {
             </div>
         `;
 
-        bookingsListContainer.appendChild(card);
+            bookingsListContainer.appendChild(card);
+        } catch (procErr) {
+            console.error("IshanCabs: Error rendering booking card:", booking.id, procErr);
+        }
     });
 
     // Initialize maps for all rendered bookings
