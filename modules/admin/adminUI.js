@@ -225,6 +225,17 @@ const activePromosTbody = document.getElementById("active-promos-tbody");
 // Manual Discount Override inside Approve Modal
 const approveDiscountOverride = document.getElementById("approve-discount-override");
 
+// Toggle View Switcher handles & state
+const btnViewCards = document.getElementById("btn-view-cards");
+const btnViewList = document.getElementById("btn-view-list");
+const bookingsListTableContainer = document.getElementById("bookings-list-table-container");
+const bookingsListTbody = document.getElementById("bookings-list-tbody");
+const bookingDetailModal = document.getElementById("booking-detail-modal");
+const bookingDetailModalBody = document.getElementById("booking-detail-modal-body");
+const btnCloseBookingDetail = document.getElementById("btn-close-booking-detail");
+
+let currentViewMode = "cards"; // "cards" | "list"
+
 // State Variables
 let bookingsData = [];
 let rosterData = {};
@@ -276,6 +287,7 @@ function initAdminUI() {
     // 8. Bind View Switchers
     setupViewSwitchers();
     setupFareSubTabs();
+    setupListViewToggles();
 
     // 9. Bind dynamic settings & coupon forms
     faresMatrixForm.addEventListener("submit", handleFaresFormSubmit);
@@ -549,10 +561,291 @@ function setupFareSubTabs() {
     });
 }
 
+function setupListViewToggles() {
+    if (btnViewCards) {
+        btnViewCards.addEventListener("click", () => {
+            currentViewMode = "cards";
+            btnViewCards.className = "flex-1 lg:flex-initial px-4 py-2.5 text-xs font-bold rounded-xl text-amber-500 bg-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5";
+            if (btnViewList) btnViewList.className = "flex-1 lg:flex-initial px-4 py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200 flex items-center justify-center gap-1.5";
+            renderBookings();
+        });
+    }
+    if (btnViewList) {
+        btnViewList.addEventListener("click", () => {
+            currentViewMode = "list";
+            btnViewList.className = "flex-1 lg:flex-initial px-4 py-2.5 text-xs font-bold rounded-xl text-amber-500 bg-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5";
+            if (btnViewCards) btnViewCards.className = "flex-1 lg:flex-initial px-4 py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200 flex items-center justify-center gap-1.5";
+            renderBookings();
+        });
+    }
+    if (btnCloseBookingDetail) {
+        btnCloseBookingDetail.addEventListener("click", () => {
+            utils.hideElement(bookingDetailModal);
+            bookingDetailModalBody.innerHTML = "";
+            destroyAllAdminMaps(); // Safe cleanup
+        });
+    }
+}
+
+function showBookingDetailModal(booking) {
+    bookingDetailModalBody.innerHTML = "";
+    
+    const card = document.createElement("div");
+    card.className = "admin-card p-6 rounded-3xl border border-slate-800/80 flex flex-col justify-between";
+    card.innerHTML = buildBookingCardContentHtml(booking, true);
+    bookingDetailModalBody.appendChild(card);
+    
+    utils.showElement(bookingDetailModal);
+    
+    // Initialize Leaflet map inside the modal
+    initAdminMap(booking, true);
+    
+    // Bind action click handlers on the modal buttons
+    bindCardActionButtonEvents(bookingDetailModalBody);
+}
+
+function buildBookingCardContentHtml(booking, isModal = false) {
+    const tripDetails = booking.trip_details || {};
+    const fareDetails = booking.fare_details || {};
+    const custDetails = booking.customer_details || {};
+    const driverAssignment = booking.driver_assignment || null;
+    const bStatus = booking.status || "pending_approval";
+    const isRequestedStatus = (bStatus === "pending_approval" || bStatus === "pending" || bStatus === "requested");
+
+    // Style status badges cleanly
+    let statusText = "Requested";
+    let badgeClass = "bg-amber-500/10 border-amber-500/20 text-amber-400";
+    if (bStatus === "confirmed") {
+        statusText = "Confirmed";
+        badgeClass = "bg-blue-500/10 border-blue-500/20 text-blue-400";
+    } else if (bStatus === "active" || bStatus === "ongoing") {
+        statusText = `<span class="inline-flex items-center"><span class="relative flex h-2 w-2 mr-1.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>On-Going</span>`;
+        badgeClass = "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
+    } else if (bStatus === "completed") {
+        statusText = "Completed";
+        badgeClass = "bg-slate-800/80 border-slate-700/60 text-slate-400";
+    } else if (bStatus === "rejected" || bStatus === "cancelled") {
+        statusText = "Rejected";
+        badgeClass = "bg-rose-500/10 border-rose-500/20 text-rose-400";
+    }
+
+    // Style booking channel badges cleanly
+    let channelText = "Website";
+    let channelClass = "bg-sky-500/10 border-sky-500/20 text-sky-400";
+    if (booking.booking_channel === "call") {
+        channelText = "📞 Call";
+        channelClass = "bg-amber-500/10 border-amber-500/20 text-amber-400";
+    } else if (booking.booking_channel === "whatsapp") {
+        channelText = "💬 WhatsApp";
+        channelClass = "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
+    }
+
+    const dateStr = tripDetails.pickup_date || "--";
+    const timeStr = tripDetails.pickup_time || "--";
+    const creationDate = booking.creation_ts 
+        ? (booking.creation_ts.seconds ? new Date(booking.creation_ts.seconds * 1000).toLocaleString() : new Date(booking.creation_ts).toLocaleString())
+        : "Recently Added";
+
+    // Compute fare details with discounts/promos
+    const finalFare = typeof fareDetails.estimated_fare === "number" ? fareDetails.estimated_fare : 0;
+    const baseFare = typeof fareDetails.base_fare === "number" ? fareDetails.base_fare : finalFare;
+    const discount = fareDetails.discount_amount || 0;
+    const promo = fareDetails.promo_code;
+    const kmVal = fareDetails.estimated_km || 0;
+
+    const breakdown = fareDetails.breakdown;
+    let amountHtml = `${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-`;
+    if (breakdown) {
+        const parts = [];
+        if (typeof breakdown.base_fare === "number" && breakdown.base_fare > 0) parts.push(`Base: ₹${breakdown.base_fare}`);
+        if (typeof breakdown.extra_km_charge === "number" && breakdown.extra_km_charge > 0) parts.push(`Extra KM: ₹${breakdown.extra_km_charge}`);
+        if (typeof breakdown.extra_hour_charge === "number" && breakdown.extra_hour_charge > 0) parts.push(`Extra Hrs: ₹${breakdown.extra_hour_charge}`);
+        if (typeof breakdown.night_charge === "number" && breakdown.night_charge > 0) parts.push(`Night fee: ₹${breakdown.night_charge}`);
+        if (typeof breakdown.driver_allowance === "number" && breakdown.driver_allowance > 0) parts.push(`Driver: ₹${breakdown.driver_allowance}`);
+        if (typeof breakdown.night_halt === "number" && breakdown.night_halt > 0) parts.push(`Halt: ₹${breakdown.night_halt}`);
+        if (typeof breakdown.discount === "number" && breakdown.discount > 0) parts.push(`Promo: -₹${breakdown.discount}`);
+        
+        amountHtml = `
+            <span class="block">${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-</span>
+            <span class="text-[9px] text-slate-400 font-normal block mt-0.5 leading-tight">${parts.join(" | ")}</span>
+        `;
+    } else if (discount > 0) {
+        amountHtml = `
+            <span class="block">${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-</span>
+            <span class="text-[9px] text-slate-400 font-normal block mt-0.5 leading-tight">Base: ₹${baseFare.toLocaleString("en-IN")} | Promo: ${promo} (-₹${discount.toLocaleString("en-IN")})</span>
+        `;
+    }
+
+    const pickupLoc = tripDetails.pickup_location || "Not specified";
+    const dropLoc = tripDetails.drop_location || "Not specified";
+    const vehicleTier = fareDetails.vehicle_tier || "standard";
+    const rideType = tripDetails.ride_type || "local";
+    const custName = custDetails.name || booking.customer_id || "Rider";
+    const custPhone = custDetails.phone || "N/A";
+    const bookingIdStr = booking.booking_id || booking.id || "N/A";
+
+    return `
+        <div class="space-y-4">
+            <!-- Card Header -->
+            <div class="flex justify-between items-start border-b border-slate-800 pb-3">
+                <div>
+                    <span class="text-[10px] font-black text-slate-500 tracking-wider block uppercase">Booking ID</span>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <h4 class="font-bold text-white text-sm tracking-wide">${bookingIdStr}</h4>
+                        <span class="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wider border ${channelClass}">
+                            ${channelText}
+                        </span>
+                    </div>
+                </div>
+                <span class="border px-2.5 py-1 rounded-xl text-xs font-bold ${badgeClass}">
+                    ${statusText}
+                </span>
+            </div>
+
+            <!-- Trip Routing Details -->
+            <div class="grid grid-cols-2 gap-4 text-xs">
+                <div>
+                    <span class="text-slate-500 block">Pickup Location</span>
+                    <span class="font-semibold text-slate-200 block mt-0.5">${pickupLoc}</span>
+                </div>
+                <div>
+                    <span class="text-slate-500 block">Destination</span>
+                    <span class="font-semibold text-slate-200 block mt-0.5">${dropLoc}</span>
+                </div>
+            </div>
+
+            <!-- Timings & Category -->
+            <div class="grid grid-cols-3 gap-2 text-xs border-y border-slate-800/50 py-3">
+                <div>
+                    <span class="text-[10px] text-slate-500 block">Pickup Timing</span>
+                    <span class="font-semibold text-slate-300 block mt-0.5">${dateStr} ${timeStr}</span>
+                </div>
+                <div>
+                    <span class="text-[10px] text-slate-500 block">Tier / Mode</span>
+                    <span class="font-semibold text-slate-300 block mt-0.5 uppercase">${vehicleTier} (${rideType})</span>
+                </div>
+                <div>
+                    <span class="text-[10px] text-slate-500 block">KM & Amount</span>
+                    <span class="font-semibold text-amber-500 block mt-0.5">${amountHtml}</span>
+                </div>
+            </div>
+
+            <!-- Rider Info -->
+            <div class="text-xs space-y-1">
+                <span class="text-[10px] font-bold text-slate-500 tracking-wider block uppercase">Passenger Details</span>
+                <p class="font-medium text-slate-200">${custName} • <a href="tel:${custPhone}" class="text-amber-400 hover:underline font-bold">${custPhone}</a></p>
+            </div>
+
+            <!-- Driver Allocation Panel -->
+            ${(bStatus === "confirmed" || bStatus === "active" || bStatus === "completed") && driverAssignment ? `
+            <div class="bg-slate-950/60 border border-slate-800/60 p-3 rounded-2xl text-xs mt-3">
+                <span class="text-[10px] font-bold text-slate-500 tracking-wider block uppercase mb-1.5">Assigned Fleet</span>
+                <div class="grid grid-cols-2 gap-2 text-slate-300">
+                    <div>
+                        <span class="text-slate-500 block text-[10px]">Driver</span>
+                        <span class="font-bold">${driverAssignment.driver_name || "Assigned"}</span>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block text-[10px]">Vehicle Plate</span>
+                        <span class="font-bold text-amber-400 uppercase">${driverAssignment.vehicle_number || "N/A"}</span>
+                    </div>
+                </div>
+            </div>
+            ` : ""}
+
+            <!-- Rejection Details -->
+            ${(bStatus === "rejected" || bStatus === "cancelled") && booking.rejection_reason ? `
+            <div class="bg-rose-950/10 border border-rose-500/10 p-3 rounded-2xl text-xs mt-3">
+                <span class="text-[10px] font-bold text-rose-400 tracking-wider block uppercase mb-0.5">Rejection Reason</span>
+                <p class="text-rose-300 leading-relaxed">${booking.rejection_reason}</p>
+            </div>
+            ` : ""}
+
+            <!-- Rating Review Panel (If Completed and feedback is present) -->
+            ${bStatus === "completed" && booking.feedback ? `
+            <div class="bg-slate-900/40 border border-slate-800/60 p-3 rounded-2xl text-xs mt-3">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-[10px] font-bold text-amber-400 tracking-wider uppercase">User Feedback</span>
+                    <div class="flex text-amber-500 gap-0.5">
+                        ${Array.from({ length: 5 }, (_, i) => `
+                            <svg class="w-3 h-3 ${i < booking.feedback.rating ? "fill-current" : "stroke-current text-slate-600 fill-none"}" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                            </svg>
+                        `).join("")}
+                    </div>
+                </div>
+                <p class="text-slate-300 italic">"${booking.feedback.comments || "No comments written."}"</p>
+            </div>
+            ` : ""}
+
+            <!-- Route Map Preview -->
+            <div id="${isModal ? 'map-modal-admin-' + booking.id : 'map-admin-' + booking.id}" class="h-40 w-full mt-3 rounded-2xl border border-slate-800/80 overflow-hidden relative z-10"></div>
+        </div>
+
+        <!-- Action Controllers Panel -->
+        <div class="mt-6 border-t border-slate-800/60 pt-4 flex gap-3">
+            ${isRequestedStatus ? `
+                <button type="button" class="btn-approve flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-emerald-500/10" data-id="${booking.id}">
+                    Accept Ride
+                </button>
+                <button type="button" class="btn-reject flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-rose-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
+                    Reject
+                </button>
+                <button type="button" class="btn-text-rider flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
+                    Text Rider
+                </button>
+            ` : ""}
+
+            ${bStatus === "confirmed" ? (() => {
+                const pickupDate = tripDetails.pickup_date;
+                const pickupTime = tripDetails.pickup_time;
+                let hasPassed = true;
+                if (pickupDate && pickupTime) {
+                    const pickupDateTime = new Date(`${pickupDate}T${pickupTime}`);
+                    if (!isNaN(pickupDateTime.getTime())) {
+                        hasPassed = new Date() >= pickupDateTime;
+                    }
+                }
+                return `
+                    <button type="button" 
+                        class="btn-start flex-1 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md ${
+                            hasPassed 
+                            ? "bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/10 cursor-pointer" 
+                            : "bg-slate-900 text-slate-600 border border-slate-800/80 cursor-not-allowed"
+                        }" 
+                        data-id="${booking.id}"
+                        ${hasPassed ? "" : "disabled"}
+                        title="${hasPassed ? "Click to start the ride" : "Ride cannot be started before the pickup time"}"
+                    >
+                        ${hasPassed ? "Start Ride" : "Start Ride (Locked)"}
+                    </button>
+                    <button type="button" class="btn-approve flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200" data-id="${booking.id}">
+                        Reassign Driver
+                    </button>
+                `;
+            })() : ""}
+
+            ${booking.status === "active" ? `
+                <button type="button" class="btn-complete flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-amber-500/10" data-id="${booking.id}">
+                    Mark Completed
+                </button>
+                <button type="button" class="btn-text-rider flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
+                    Text Rider
+                </button>
+            ` : ""}
+
+            ${booking.status === "completed" || booking.status === "rejected" ? `
+                <span class="text-slate-600 text-[10px] uppercase font-bold tracking-widest text-center w-full py-1">Archived History Record</span>
+            ` : ""}
+        </div>
+    `;
+}
+
 // Render filtered card summaries
 function renderBookings() {
     destroyAllAdminMaps();
     bookingsListContainer.innerHTML = "";
+    bookingsListTbody.innerHTML = "";
     utils.hideElement(adminAlert);
 
     // Apply Filter rules supporting legacy status aliases
@@ -573,273 +866,106 @@ function renderBookings() {
 
     if (filteredBookings.length === 0) {
         utils.hideElement(bookingsListContainer);
+        utils.hideElement(bookingsListTableContainer);
         utils.showElement(bookingsEmptyState);
         return;
     }
 
     utils.hideElement(bookingsEmptyState);
-    utils.showElement(bookingsListContainer);
 
-    filteredBookings.forEach(booking => {
-        try {
-            const card = document.createElement("div");
-            card.className = "admin-card p-6 rounded-3xl border border-slate-800/80 hover:border-slate-700/80 transition-all duration-300 flex flex-col justify-between";
+    if (currentViewMode === "cards") {
+        utils.hideElement(bookingsListTableContainer);
+        utils.showElement(bookingsListContainer);
 
-            const tripDetails = booking.trip_details || {};
-            const fareDetails = booking.fare_details || {};
-            const custDetails = booking.customer_details || {};
-            const driverAssignment = booking.driver_assignment || null;
-            const bStatus = booking.status || "pending_approval";
-            const isRequestedStatus = (bStatus === "pending_approval" || bStatus === "pending" || bStatus === "requested");
-
-            // Style status badges cleanly
-            let statusText = "Requested";
-            let badgeClass = "bg-amber-500/10 border-amber-500/20 text-amber-400";
-            if (bStatus === "confirmed") {
-                statusText = "Confirmed";
-                badgeClass = "bg-blue-500/10 border-blue-500/20 text-blue-400";
-            } else if (bStatus === "active" || bStatus === "ongoing") {
-                statusText = `<span class="inline-flex items-center"><span class="relative flex h-2 w-2 mr-1.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span></span>On-Going</span>`;
-                badgeClass = "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
-            } else if (bStatus === "completed") {
-                statusText = "Completed";
-                badgeClass = "bg-slate-800/80 border-slate-700/60 text-slate-400";
-            } else if (bStatus === "rejected" || bStatus === "cancelled") {
-                statusText = "Rejected";
-                badgeClass = "bg-rose-500/10 border-rose-500/20 text-rose-400";
+        filteredBookings.forEach(booking => {
+            try {
+                const card = document.createElement("div");
+                card.className = "admin-card p-6 rounded-3xl border border-slate-800/80 hover:border-slate-700/80 transition-all duration-300 flex flex-col justify-between";
+                card.innerHTML = buildBookingCardContentHtml(booking, false);
+                bookingsListContainer.appendChild(card);
+            } catch (procErr) {
+                console.error("IshanCabs: Error rendering booking card:", booking.id, procErr);
             }
+        });
 
-            // Style booking channel badges cleanly
-            let channelText = "Website";
-            let channelClass = "bg-sky-500/10 border-sky-500/20 text-sky-400";
-            if (booking.booking_channel === "call") {
-                channelText = "📞 Call";
-                channelClass = "bg-amber-500/10 border-amber-500/20 text-amber-400";
-            } else if (booking.booking_channel === "whatsapp") {
-                channelText = "💬 WhatsApp";
-                channelClass = "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
-            }
+        // Initialize maps for all rendered bookings
+        filteredBookings.forEach(booking => {
+            initAdminMap(booking, false);
+        });
 
-            const dateStr = tripDetails.pickup_date || "--";
-            const timeStr = tripDetails.pickup_time || "--";
-            const creationDate = booking.creation_ts 
-                ? (booking.creation_ts.seconds ? new Date(booking.creation_ts.seconds * 1000).toLocaleString() : new Date(booking.creation_ts).toLocaleString())
-                : "Recently Added";
+        // Bind action events dynamically to injected DOM buttons
+        bindCardActionButtonEvents(bookingsListContainer);
+    } else {
+        utils.hideElement(bookingsListContainer);
+        utils.showElement(bookingsListTableContainer);
 
-            // Compute fare details with discounts/promos
-            const finalFare = typeof fareDetails.estimated_fare === "number" ? fareDetails.estimated_fare : 0;
-            const baseFare = typeof fareDetails.base_fare === "number" ? fareDetails.base_fare : finalFare;
-            const discount = fareDetails.discount_amount || 0;
-            const promo = fareDetails.promo_code;
-            const kmVal = fareDetails.estimated_km || 0;
+        filteredBookings.forEach(booking => {
+            try {
+                const tripDetails = booking.trip_details || {};
+                const fareDetails = booking.fare_details || {};
+                const custDetails = booking.customer_details || {};
+                const bStatus = booking.status || "pending_approval";
 
-            const breakdown = fareDetails.breakdown;
-            let amountHtml = `${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-`;
-            if (breakdown) {
-                const parts = [];
-                if (typeof breakdown.base_fare === "number" && breakdown.base_fare > 0) parts.push(`Base: ₹${breakdown.base_fare}`);
-                if (typeof breakdown.extra_km_charge === "number" && breakdown.extra_km_charge > 0) parts.push(`Extra KM: ₹${breakdown.extra_km_charge}`);
-                if (typeof breakdown.extra_hour_charge === "number" && breakdown.extra_hour_charge > 0) parts.push(`Extra Hrs: ₹${breakdown.extra_hour_charge}`);
-                if (typeof breakdown.night_charge === "number" && breakdown.night_charge > 0) parts.push(`Night fee: ₹${breakdown.night_charge}`);
-                if (typeof breakdown.driver_allowance === "number" && breakdown.driver_allowance > 0) parts.push(`Driver allowance: ₹${breakdown.driver_allowance}`);
-                if (typeof breakdown.night_halt === "number" && breakdown.night_halt > 0) parts.push(`Halt: ₹${breakdown.night_halt}`);
-                if (typeof breakdown.discount === "number" && breakdown.discount > 0) parts.push(`Promo: -₹${breakdown.discount}`);
+                // Build Status badge for table
+                let statusText = "Requested";
+                let badgeClass = "bg-amber-500/10 border-amber-500/20 text-amber-400";
+                if (bStatus === "confirmed") {
+                    statusText = "Confirmed";
+                    badgeClass = "bg-blue-500/10 border-blue-500/20 text-blue-400";
+                } else if (bStatus === "active" || bStatus === "ongoing") {
+                    statusText = "On-Going";
+                    badgeClass = "bg-emerald-500/10 border-emerald-500/20 text-emerald-400";
+                } else if (bStatus === "completed") {
+                    statusText = "Completed";
+                    badgeClass = "bg-slate-800 border-slate-700 text-slate-300";
+                } else if (bStatus === "rejected" || bStatus === "cancelled") {
+                    statusText = "Rejected";
+                    badgeClass = "bg-rose-500/10 border-rose-500/20 text-rose-400";
+                }
+
+                const pickupLoc = tripDetails.pickup_location || "Not specified";
+                const dropLoc = tripDetails.drop_location || "Not specified";
+                const pickupTimeStr = `${tripDetails.pickup_date || "--"} ${tripDetails.pickup_time || "--"}`;
+                const custName = custDetails.name || booking.customer_id || "Rider";
+                const bookingIdStr = booking.booking_id || booking.id || "N/A";
                 
-                amountHtml = `
-                    <span class="block">${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-</span>
-                    <span class="text-[9px] text-slate-400 font-normal block mt-0.5 leading-tight">${parts.join(" | ")}</span>
+                // Format dynamic fare details text
+                const finalFare = typeof fareDetails.estimated_fare === "number" ? fareDetails.estimated_fare : 0;
+                const kmVal = fareDetails.estimated_km || 0;
+                const vehicleTier = (fareDetails.vehicle_tier || "standard").toUpperCase();
+                const rideType = tripDetails.ride_type || "local";
+
+                const tr = document.createElement("tr");
+                tr.className = "hover:bg-slate-900/40 cursor-pointer transition-colors duration-150 border-b border-slate-800/40";
+                tr.innerHTML = `
+                    <td class="py-4 px-5 font-mono text-slate-400 font-bold">${bookingIdStr}</td>
+                    <td class="py-4 px-5 text-slate-300 whitespace-nowrap">${pickupTimeStr}</td>
+                    <td class="py-4 px-5 text-slate-300 font-semibold">${custName}</td>
+                    <td class="py-4 px-5 text-slate-400 max-w-[200px] truncate" title="${pickupLoc} ➔ ${dropLoc}">${pickupLoc} ➔ ${dropLoc}</td>
+                    <td class="py-4 px-5 text-slate-400 font-semibold uppercase whitespace-nowrap">${vehicleTier} (${rideType})</td>
+                    <td class="py-4 px-5 text-amber-500 font-bold whitespace-nowrap">₹${finalFare.toLocaleString("en-IN")} (${kmVal} km)</td>
+                    <td class="py-4 px-5 text-right whitespace-nowrap">
+                        <span class="inline-flex px-2 py-0.5 text-[10px] font-bold rounded-lg border ${badgeClass}">${statusText}</span>
+                    </td>
                 `;
-            } else if (discount > 0) {
-                amountHtml = `
-                    <span class="block">${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-</span>
-                    <span class="text-[9px] text-slate-400 font-normal block mt-0.5 leading-tight">Base: ₹${baseFare.toLocaleString("en-IN")} | Promo: ${promo} (-₹${discount.toLocaleString("en-IN")})</span>
-                `;
+
+                // Row click triggers the detailed modal popup!
+                tr.addEventListener("click", () => {
+                    showBookingDetailModal(booking);
+                });
+                bookingsListTbody.appendChild(tr);
+            } catch (procErr) {
+                console.error("IshanCabs: Error rendering list row:", booking.id, procErr);
             }
-
-            const pickupLoc = tripDetails.pickup_location || "Not specified";
-            const dropLoc = tripDetails.drop_location || "Not specified";
-            const vehicleTier = fareDetails.vehicle_tier || "standard";
-            const rideType = tripDetails.ride_type || "local";
-            const custName = custDetails.name || booking.customer_id || "Rider";
-            const custPhone = custDetails.phone || "N/A";
-            const bookingIdStr = booking.booking_id || booking.id || "N/A";
-
-            // HTML code structure for each card
-            card.innerHTML = `
-                <div class="space-y-4">
-                    <!-- Card Header -->
-                    <div class="flex justify-between items-start border-b border-slate-800 pb-3">
-                        <div>
-                            <span class="text-[10px] font-black text-slate-500 tracking-wider block uppercase">Booking ID</span>
-                            <div class="flex items-center gap-2 mt-0.5">
-                                <h4 class="font-bold text-white text-sm tracking-wide">${bookingIdStr}</h4>
-                                <span class="px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase tracking-wider border ${channelClass}">
-                                    ${channelText}
-                                </span>
-                            </div>
-                        </div>
-                        <span class="border px-2.5 py-1 rounded-xl text-xs font-bold ${badgeClass}">
-                            ${statusText}
-                        </span>
-                    </div>
-
-                    <!-- Trip Routing Details -->
-                    <div class="grid grid-cols-2 gap-4 text-xs">
-                        <div>
-                            <span class="text-slate-500 block">Pickup Location</span>
-                            <span class="font-semibold text-slate-200 block mt-0.5">${pickupLoc}</span>
-                        </div>
-                        <div>
-                            <span class="text-slate-500 block">Destination</span>
-                            <span class="font-semibold text-slate-200 block mt-0.5">${dropLoc}</span>
-                        </div>
-                    </div>
-
-                    <!-- Timings & Category -->
-                    <div class="grid grid-cols-3 gap-2 text-xs border-y border-slate-800/50 py-3">
-                        <div>
-                            <span class="text-[10px] text-slate-500 block">Pickup Timing</span>
-                            <span class="font-semibold text-slate-300 block mt-0.5">${dateStr} ${timeStr}</span>
-                        </div>
-                        <div>
-                            <span class="text-[10px] text-slate-500 block">Tier / Mode</span>
-                            <span class="font-semibold text-slate-300 block mt-0.5 uppercase">${vehicleTier} (${rideType})</span>
-                        </div>
-                        <div>
-                            <span class="text-[10px] text-slate-500 block">KM & Amount</span>
-                            <span class="font-semibold text-amber-500 block mt-0.5">${amountHtml}</span>
-                        </div>
-                    </div>
-
-                    <!-- Rider Info -->
-                    <div class="text-xs space-y-1">
-                        <span class="text-[10px] font-bold text-slate-500 tracking-wider block uppercase">Passenger Details</span>
-                        <p class="font-medium text-slate-200">${custName} • <a href="tel:${custPhone}" class="text-amber-400 hover:underline font-bold">${custPhone}</a></p>
-                    </div>
-
-                    <!-- Driver Allocation Panel -->
-                    ${(bStatus === "confirmed" || bStatus === "active" || bStatus === "completed") && driverAssignment ? `
-                    <div class="bg-slate-950/60 border border-slate-800/60 p-3 rounded-2xl text-xs mt-3">
-                        <span class="text-[10px] font-bold text-slate-500 tracking-wider block uppercase mb-1.5">Assigned Fleet</span>
-                        <div class="grid grid-cols-2 gap-2 text-slate-300">
-                            <div>
-                                <span class="text-slate-500 block text-[10px]">Driver</span>
-                                <span class="font-bold">${driverAssignment.driver_name || "Assigned"}</span>
-                            </div>
-                            <div>
-                                <span class="text-slate-500 block text-[10px]">Vehicle Plate</span>
-                                <span class="font-bold text-amber-400 uppercase">${driverAssignment.vehicle_number || "N/A"}</span>
-                            </div>
-                        </div>
-                    </div>
-                    ` : ""}
-
-                    <!-- Rejection Details -->
-                    ${(bStatus === "rejected" || bStatus === "cancelled") && booking.rejection_reason ? `
-                    <div class="bg-rose-950/10 border border-rose-500/10 p-3 rounded-2xl text-xs mt-3">
-                        <span class="text-[10px] font-bold text-rose-400 tracking-wider block uppercase mb-0.5">Rejection Reason</span>
-                        <p class="text-rose-300 leading-relaxed">${booking.rejection_reason}</p>
-                    </div>
-                    ` : ""}
-
-                    <!-- Rating Review Panel (If Completed and feedback is present) -->
-                    ${bStatus === "completed" && booking.feedback ? `
-                    <div class="bg-slate-900/40 border border-slate-800/60 p-3 rounded-2xl text-xs mt-3">
-                        <div class="flex justify-between items-center mb-1">
-                            <span class="text-[10px] font-bold text-amber-400 tracking-wider uppercase">User Feedback</span>
-                            <div class="flex text-amber-500 gap-0.5">
-                                ${Array.from({ length: 5 }, (_, i) => `
-                                    <svg class="w-3 h-3 ${i < booking.feedback.rating ? "fill-current" : "stroke-current text-slate-600 fill-none"}" viewBox="0 0 20 20">
-                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                    </svg>
-                                `).join("")}
-                            </div>
-                        </div>
-                        <p class="text-slate-300 italic">"${booking.feedback.comments || "No comments written."}"</p>
-                    </div>
-                    ` : ""}
-
-                    <!-- Route Map Preview -->
-                    <div id="map-admin-${booking.id}" class="h-40 w-full mt-3 rounded-2xl border border-slate-800/80 overflow-hidden relative z-10"></div>
-                </div>
-
-                <!-- Action Controllers Panel -->
-                <div class="mt-6 border-t border-slate-800/60 pt-4 flex gap-3">
-                    ${isRequestedStatus ? `
-                        <button type="button" class="btn-approve flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-emerald-500/10" data-id="${booking.id}">
-                            Accept Ride
-                        </button>
-                        <button type="button" class="btn-reject flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-rose-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
-                            Reject
-                        </button>
-                        <button type="button" class="btn-text-rider flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
-                            Text Rider
-                        </button>
-                    ` : ""}
-
-                    ${bStatus === "confirmed" ? (() => {
-                        const pickupDate = tripDetails.pickup_date;
-                        const pickupTime = tripDetails.pickup_time;
-                        let hasPassed = true;
-                        if (pickupDate && pickupTime) {
-                            const pickupDateTime = new Date(`${pickupDate}T${pickupTime}`);
-                            if (!isNaN(pickupDateTime.getTime())) {
-                                hasPassed = new Date() >= pickupDateTime;
-                            }
-                        }
-                        return `
-                            <button type="button" 
-                                class="btn-start flex-1 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md ${
-                                    hasPassed 
-                                    ? "bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/10 cursor-pointer" 
-                                    : "bg-slate-900 text-slate-600 border border-slate-800/80 cursor-not-allowed"
-                                }" 
-                                data-id="${booking.id}"
-                                ${hasPassed ? "" : "disabled"}
-                                title="${hasPassed ? "Click to start the ride" : "Ride cannot be started before the pickup time"}"
-                            >
-                                ${hasPassed ? "Start Ride" : "Start Ride (Locked)"}
-                            </button>
-                            <button type="button" class="btn-approve flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200" data-id="${booking.id}">
-                                Reassign Driver
-                            </button>
-                        `;
-                    })() : ""}
-
-                ${booking.status === "active" ? `
-                    <button type="button" class="btn-complete flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-amber-500/10" data-id="${booking.id}">
-                        Mark Completed
-                    </button>
-                    <button type="button" class="btn-text-rider flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
-                        Text Rider
-                    </button>
-                ` : ""}
-
-                ${booking.status === "completed" || booking.status === "rejected" ? `
-                    <span class="text-slate-600 text-[10px] uppercase font-bold tracking-widest text-center w-full py-1">Archived History Record</span>
-                ` : ""}
-            </div>
-        `;
-
-            bookingsListContainer.appendChild(card);
-        } catch (procErr) {
-            console.error("IshanCabs: Error rendering booking card:", booking.id, procErr);
-        }
-    });
-
-    // Initialize maps for all rendered bookings
-    filteredBookings.forEach(booking => {
-        initAdminMap(booking);
-    });
-
-    // Bind action events dynamically to injected DOM buttons
-    bindCardActionButtonEvents();
+        });
+    }
+}
 }
 
 // Bind action click controllers
-function bindCardActionButtonEvents() {
+function bindCardActionButtonEvents(container = document) {
     // 1. Approve modal triggers
-    const approveButtons = document.querySelectorAll(".btn-approve");
+    const approveButtons = container.querySelectorAll(".btn-approve");
     approveButtons.forEach(btn => {
         btn.addEventListener("click", () => {
             const bookingId = btn.getAttribute("data-id");
@@ -861,7 +987,7 @@ function bindCardActionButtonEvents() {
     });
 
     // 2. Reject modal triggers
-    const rejectButtons = document.querySelectorAll(".btn-reject");
+    const rejectButtons = container.querySelectorAll(".btn-reject");
     rejectButtons.forEach(btn => {
         btn.addEventListener("click", () => {
             const bookingId = btn.getAttribute("data-id");
@@ -873,7 +999,7 @@ function bindCardActionButtonEvents() {
     });
 
     // 3. Mark as Completed directly
-    const completeButtons = document.querySelectorAll(".btn-complete");
+    const completeButtons = container.querySelectorAll(".btn-complete");
     completeButtons.forEach(btn => {
         btn.addEventListener("click", async () => {
             const bookingId = btn.getAttribute("data-id");
@@ -894,7 +1020,7 @@ function bindCardActionButtonEvents() {
     });
 
     // 3.5. Start Ride trigger
-    const startButtons = document.querySelectorAll(".btn-start");
+    const startButtons = container.querySelectorAll(".btn-start");
     startButtons.forEach(btn => {
         btn.addEventListener("click", async () => {
             const bookingId = btn.getAttribute("data-id");
@@ -915,7 +1041,7 @@ function bindCardActionButtonEvents() {
     });
 
     // 4. Text Rider trigger
-    const textButtons = document.querySelectorAll(".btn-text-rider");
+    const textButtons = container.querySelectorAll(".btn-text-rider");
     textButtons.forEach(btn => {
         btn.addEventListener("click", () => {
             const bookingId = btn.getAttribute("data-id");
@@ -1151,10 +1277,18 @@ async function handleLogout() {
     }
 }
 
-function initAdminMap(booking) {
-    const mapId = `map-admin-${booking.id}`;
+function initAdminMap(booking, isModal = false) {
+    const mapId = isModal ? `map-modal-admin-${booking.id}` : `map-admin-${booking.id}`;
+    const cacheKey = isModal ? `modal-${booking.id}` : booking.id;
     const mapContainer = document.getElementById(mapId);
     if (!mapContainer) return;
+
+    if (adminMaps[cacheKey]) {
+        try {
+            adminMaps[cacheKey].remove();
+        } catch (e) {}
+        delete adminMaps[cacheKey];
+    }
 
     let pickupCoords = booking.trip_details.pickup_coords;
     let dropCoords = booking.trip_details.drop_coords;
@@ -1235,7 +1369,7 @@ function initAdminMap(booking) {
             }, 100);
         }
 
-        adminMaps[booking.id] = map;
+        adminMaps[cacheKey] = map;
     } catch (err) {
         console.error("Failed to initialize admin map:", err);
     }

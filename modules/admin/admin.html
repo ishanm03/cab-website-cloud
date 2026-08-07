@@ -149,27 +149,46 @@
                 </div>
             </section>
 
-            <!-- Dynamic Filter Tabs -->
-            <section class="mb-6 flex flex-wrap bg-slate-950 p-1.5 rounded-2xl border border-slate-800 max-w-2xl gap-1">
-                <button type="button" id="tab-all" class="flex-1 min-w-[60px] py-2.5 text-xs font-bold rounded-xl text-amber-500 bg-slate-900 transition-all duration-200">
-                    All
-                </button>
-                <button type="button" id="tab-req" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
-                    Requested
-                </button>
-                <button type="button" id="tab-conf" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
-                    Confirmed
-                </button>
-                <button type="button" id="tab-ong" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
-                    On-Going
-                </button>
-                <button type="button" id="tab-comp" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
-                    Completed
-                </button>
-                <button type="button" id="tab-rej" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
-                    Rejected
-                </button>
-            </section>
+            <!-- Filters and View Toggle Bar -->
+            <div class="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 mb-6">
+                <!-- Dynamic Filter Tabs -->
+                <section class="flex flex-wrap bg-slate-950 p-1.5 rounded-2xl border border-slate-800 gap-1 flex-grow max-w-2xl">
+                    <button type="button" id="tab-all" class="flex-1 min-w-[60px] py-2.5 text-xs font-bold rounded-xl text-amber-500 bg-slate-900 transition-all duration-200">
+                        All
+                    </button>
+                    <button type="button" id="tab-req" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
+                        Requested
+                    </button>
+                    <button type="button" id="tab-conf" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
+                        Confirmed
+                    </button>
+                    <button type="button" id="tab-ong" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
+                        On-Going
+                    </button>
+                    <button type="button" id="tab-comp" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
+                        Completed
+                    </button>
+                    <button type="button" id="tab-rej" class="flex-1 min-w-[80px] py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200">
+                        Rejected
+                    </button>
+                </section>
+
+                <!-- View Switcher -->
+                <div class="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 gap-1 self-stretch lg:self-auto">
+                    <button type="button" id="btn-view-cards" class="flex-1 lg:flex-initial px-4 py-2.5 text-xs font-bold rounded-xl text-amber-500 bg-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                        </svg>
+                        Card View
+                    </button>
+                    <button type="button" id="btn-view-list" class="flex-1 lg:flex-initial px-4 py-2.5 text-xs font-semibold rounded-xl text-slate-400 hover:text-white transition-all duration-200 flex items-center justify-center gap-1.5">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                        List View
+                    </button>
+                </div>
+            </div>
 
             <!-- Error / Info Alerts -->
             <div id="admin-alert" class="hidden mb-6"></div>
@@ -183,6 +202,28 @@
             <!-- Bookings Cards Container -->
             <section id="bookings-list-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
                 <!-- Dynamic cards injected here -->
+            </section>
+
+            <!-- Bookings List Table Container -->
+            <section id="bookings-list-table-container" class="admin-card p-6 rounded-3xl space-y-6 hidden w-full overflow-hidden">
+                <div class="overflow-x-auto w-full border border-slate-800/80 rounded-2xl">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-950 border-b border-slate-800 text-slate-400 font-bold uppercase tracking-wider">
+                                <th class="py-4 px-5">ID</th>
+                                <th class="py-4 px-5">Date & Time</th>
+                                <th class="py-4 px-5">Customer</th>
+                                <th class="py-4 px-5">Route Details</th>
+                                <th class="py-4 px-5">Category / Tier</th>
+                                <th class="py-4 px-5">Fare Details</th>
+                                <th class="py-4 px-5 text-right">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bookings-list-tbody" class="divide-y divide-slate-800/40 text-slate-300">
+                            <!-- Injected dynamically -->
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
             <!-- Fallback Empty State -->
@@ -1337,6 +1378,21 @@
                     Confirm Rejection
                 </button>
             </form>
+        </div>
+    </div>
+
+    <!-- BOOKING DETAIL MODAL FOR LIST VIEW -->
+    <div id="booking-detail-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm hidden overflow-y-auto">
+        <div class="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative my-8">
+            <button type="button" id="btn-close-booking-detail" class="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors duration-200 z-10">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            <h2 class="text-xl font-black text-amber-500 mb-6">Booking Details</h2>
+            <div id="booking-detail-modal-body" class="space-y-6">
+                <!-- Clicked card will render here -->
+            </div>
         </div>
     </div>
 
