@@ -371,28 +371,32 @@ function startBookingsSnapshotListener() {
         const bookingsQuery = query(collection(db, "bookings"));
 
         firestoreUnsubscribe = onSnapshot(bookingsQuery, (snapshot) => {
-            bookingsData = [];
-            snapshot.forEach((doc) => {
-                bookingsData.push({
-                    id: doc.id,
-                    ...doc.data()
-                });
-            });
-
-            // Perform safe in-memory descending sort based on creation_ts
-            bookingsData.sort((a, b) => {
-                const getTs = (item) => {
-                    if (!item.creation_ts) return 0;
-                    if (typeof item.creation_ts === "object" && item.creation_ts.seconds) return item.creation_ts.seconds;
-                    if (typeof item.creation_ts === "string") return new Date(item.creation_ts).getTime() / 1000;
-                    return 0;
-                };
-                return getTs(b) - getTs(a);
-            });
-
             utils.hideElement(adminLoader);
-            updateStatsCounters();
-            renderBookings();
+            try {
+                bookingsData = [];
+                snapshot.forEach((doc) => {
+                    bookingsData.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+
+                // Perform safe in-memory descending sort based on creation_ts
+                bookingsData.sort((a, b) => {
+                    const getTs = (item) => {
+                        if (!item.creation_ts) return 0;
+                        if (typeof item.creation_ts === "object" && item.creation_ts.seconds) return item.creation_ts.seconds;
+                        if (typeof item.creation_ts === "string") return new Date(item.creation_ts).getTime() / 1000;
+                        return 0;
+                    };
+                    return getTs(b) - getTs(a);
+                });
+
+                updateStatsCounters();
+                renderBookings();
+            } catch (procErr) {
+                console.error("IshanCabs: Error processing snapshot data:", procErr);
+            }
         }, (error) => {
             console.error("IshanCabs: Firestore subscription error:", error);
             utils.hideElement(adminLoader);
@@ -503,11 +507,11 @@ function updateStatsCounters() {
     let ongoing = bookingsData.filter(b => b.status === "active" || b.status === "ongoing").length;
     let completed = bookingsData.filter(b => b.status === "completed").length;
 
-    statTotal.textContent = total;
-    statRequested.textContent = requested;
-    statConfirmed.textContent = confirmed;
-    statOngoing.textContent = ongoing;
-    statCompleted.textContent = completed;
+    if (statTotal) statTotal.textContent = total;
+    if (statRequested) statRequested.textContent = requested;
+    if (statConfirmed) statConfirmed.textContent = confirmed;
+    if (statOngoing) statOngoing.textContent = ongoing;
+    if (statCompleted) statCompleted.textContent = completed;
 }
 
 // Bind tabs clicks
