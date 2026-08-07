@@ -1,0 +1,24 @@
+{
+  "hosting": {
+    "public": "./",
+    "ignore": [
+      "firebase.json",
+      "database-backups/**",
+      "backend/**",
+      "docs/**",
+      "terraform/**",
+      "local-testing.md",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/v1/**",
+        "run": {
+          "serviceId": "sethcabs-backend-dev",
+          "region": "asia-east1"
+        }
+      }
+    ]
+  }
+}

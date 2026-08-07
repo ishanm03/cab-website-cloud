@@ -1,0 +1,17 @@
+# Ignore python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+
+# Ignore local env and secrets
+.env
+service-account.json
+
+# Ignore git configs
+.git/
+.github/
+.gitignore
