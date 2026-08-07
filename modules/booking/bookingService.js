@@ -1,6 +1,6 @@
 // modules/booking/bookingService.js
 
-import { db } from "../shared/firebase.js";
+import { auth, db } from "../shared/firebase.js";
 import { 
     collection, 
     addDoc, 
