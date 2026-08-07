@@ -368,10 +368,33 @@ async def create_booking(
         random_hex = str(uuid.uuid4().int)[:4]
         booking_id = f"BK-{date_stamp}-{random_hex}"
 
+        # Fetch customer details from users collection
+        cust_name = "Rider"
+        cust_phone = "N/A"
+        cust_email = getattr(current_user, "email", "N/A")
+        
+        try:
+            user_doc = db.collection("users").document(current_user.uid).get()
+            if user_doc.exists:
+                user_data = user_doc.to_dict()
+                cust_name = user_data.get("name") or user_data.get("displayName") or cust_name
+                cust_phone = user_data.get("phone") or user_data.get("phoneNumber") or cust_phone
+                if user_data.get("email"):
+                    cust_email = user_data.get("email")
+        except Exception as ue:
+            print(f"SethCabs Backend: Warning - Failed to fetch user profile: {str(ue)}")
+
+        customer_details = {
+            "name": cust_name,
+            "phone": cust_phone,
+            "email": cust_email
+        }
+
         # Build final secure database payload
         booking_payload = {
             "booking_id": booking_id,
             "customer_id": current_user.uid,
+            "customer_details": customer_details,
             "booking_channel": "website",
             "status": "pending_approval",
             "payment_status": "pending",

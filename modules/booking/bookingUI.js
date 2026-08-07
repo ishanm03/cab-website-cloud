@@ -723,7 +723,7 @@ async function handleStep1Submit(e) {
             const soldOutOverlay = card.querySelector(".sold-out-overlay");
 
             // Calculate fare dynamically
-            const fare = bookingService.calculateFare(category, currentRouteData.km, days, tier, metrics, currentRouteData.hours, activeRates);
+            const fare = bookingService.calculateFare(category, currentRouteData.km, days, tier, metrics, currentRouteData.hours, activeRates, currentRouteData.timeString);
             
             if (isCustomBooking) {
                 fareDisplay.innerHTML = `₹${fare.toLocaleString("en-IN")}<span class="block text-[10px] text-slate-500 font-normal">Base Rate</span>`;
