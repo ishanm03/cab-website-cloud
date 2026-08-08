@@ -237,8 +237,8 @@ const btnCloseBookingDetail = document.getElementById("btn-close-booking-detail"
 // Date Filter & Pagination DOM handles
 const filterPickupDate = document.getElementById("filter-pickup-date");
 const btnClearDate = document.getElementById("btn-clear-date");
-const filterRegDate = document.getElementById("filter-reg-date");
-const btnClearRegDate = document.getElementById("btn-clear-reg-date");
+const filterBookingDate = document.getElementById("filter-booking-date");
+const btnClearBookingDate = document.getElementById("btn-clear-booking-date");
 const bookingsPagination = document.getElementById("bookings-pagination");
 const btnPrevPage = document.getElementById("btn-prev-page");
 const btnNextPage = document.getElementById("btn-next-page");
@@ -246,7 +246,7 @@ const paginationInfo = document.getElementById("pagination-info");
 
 let currentViewMode = "cards"; // "cards" | "list"
 let currentPickupDateFilter = ""; // "" means all dates
-let currentRegDateFilter = ""; // "" means all registration dates
+let currentBookingDateFilter = ""; // "" means all booking dates
 let currentPage = 1;
 const PAGE_SIZE = 10;
 
@@ -615,6 +615,10 @@ function setupDateFilterAndPaginationEvents() {
             currentPage = 1;
             renderBookings();
         });
+        // Programmatic calendar opener on click or focus
+        const openPicker = () => { try { filterPickupDate.showPicker(); } catch (e) {} };
+        filterPickupDate.addEventListener("click", openPicker);
+        filterPickupDate.addEventListener("focus", openPicker);
     }
     if (btnClearDate) {
         btnClearDate.addEventListener("click", () => {
@@ -625,23 +629,27 @@ function setupDateFilterAndPaginationEvents() {
             renderBookings();
         });
     }
-    if (filterRegDate) {
-        filterRegDate.addEventListener("change", () => {
-            currentRegDateFilter = filterRegDate.value;
-            if (currentRegDateFilter) {
-                if (btnClearRegDate) btnClearRegDate.classList.remove("hidden");
+    if (filterBookingDate) {
+        filterBookingDate.addEventListener("change", () => {
+            currentBookingDateFilter = filterBookingDate.value;
+            if (currentBookingDateFilter) {
+                if (btnClearBookingDate) btnClearBookingDate.classList.remove("hidden");
             } else {
-                if (btnClearRegDate) btnClearRegDate.classList.add("hidden");
+                if (btnClearBookingDate) btnClearBookingDate.classList.add("hidden");
             }
             currentPage = 1;
             renderBookings();
         });
+        // Programmatic calendar opener on click or focus
+        const openPicker = () => { try { filterBookingDate.showPicker(); } catch (e) {} };
+        filterBookingDate.addEventListener("click", openPicker);
+        filterBookingDate.addEventListener("focus", openPicker);
     }
-    if (btnClearRegDate) {
-        btnClearRegDate.addEventListener("click", () => {
-            if (filterRegDate) filterRegDate.value = "";
-            currentRegDateFilter = "";
-            btnClearRegDate.classList.add("hidden");
+    if (btnClearBookingDate) {
+        btnClearBookingDate.addEventListener("click", () => {
+            if (filterBookingDate) filterBookingDate.value = "";
+            currentBookingDateFilter = "";
+            btnClearBookingDate.classList.add("hidden");
             currentPage = 1;
             renderBookings();
         });
@@ -967,10 +975,10 @@ function renderBookings() {
     };
 
     // Apply booking registration date filter
-    if (currentRegDateFilter) {
+    if (currentBookingDateFilter) {
         filteredBookings = filteredBookings.filter(b => {
             const regDate = getRegDateString(b);
-            return regDate === currentRegDateFilter;
+            return regDate === currentBookingDateFilter;
         });
     }
 
