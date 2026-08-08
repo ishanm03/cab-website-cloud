@@ -60,6 +60,7 @@ def calculate_fare_breakdown(
     global_cfg = rates_db.get("global", {})
     night_start = global_cfg.get("night_charge_start", "23:59")
     night_end = global_cfg.get("night_charge_end", "06:00")
+    local_included_km = float(global_cfg.get("local_included_km", 10.0))
     
     night_applies = is_night_time(time_string, night_start, night_end)
 
@@ -157,7 +158,7 @@ def calculate_fare_breakdown(
         config = category_rates[tier]
         
         base_fare = float(config.get("base_fare", 0.0))
-        extra_km_charge = max(0.0, actual_distance - 10.0) * float(config.get("extra_km_rate", 0.0))
+        extra_km_charge = max(0.0, actual_distance - local_included_km) * float(config.get("extra_km_rate", 0.0))
         night_charge = float(config.get("night_charge", 0.0)) if night_applies else 0.0
         
         total = base_fare + extra_km_charge + night_charge

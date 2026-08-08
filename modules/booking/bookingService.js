@@ -48,6 +48,7 @@ const bookingService = {
         const globalCfg = rates.global || {};
         const nightStart = globalCfg.night_charge_start || "23:59";
         const nightEnd = globalCfg.night_charge_end || "06:00";
+        const localIncludedKm = isNaN(parseFloat(globalCfg.local_included_km)) ? 10.0 : parseFloat(globalCfg.local_included_km);
         
         const isNightTime = (tStr) => {
             if (!tStr) return false;
@@ -108,7 +109,7 @@ const bookingService = {
         } else {
             // Local custom estimation
             const baseFare = parseFloat(config.base_fare) || 0;
-            const extraKmCharge = Math.max(0, actualDistance - 10) * (parseFloat(config.extra_km_rate) || 0);
+            const extraKmCharge = Math.max(0, actualDistance - localIncludedKm) * (parseFloat(config.extra_km_rate) || 0);
             const nightCharge = nightApplies ? (parseFloat(config.night_charge) || 0) : 0;
             return Math.round(baseFare + extraKmCharge + nightCharge);
         }

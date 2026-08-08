@@ -237,6 +237,8 @@ const btnCloseBookingDetail = document.getElementById("btn-close-booking-detail"
 // Date Filter & Pagination DOM handles
 const filterPickupDate = document.getElementById("filter-pickup-date");
 const btnClearDate = document.getElementById("btn-clear-date");
+const filterRegDate = document.getElementById("filter-reg-date");
+const btnClearRegDate = document.getElementById("btn-clear-reg-date");
 const bookingsPagination = document.getElementById("bookings-pagination");
 const btnPrevPage = document.getElementById("btn-prev-page");
 const btnNextPage = document.getElementById("btn-next-page");
@@ -244,6 +246,7 @@ const paginationInfo = document.getElementById("pagination-info");
 
 let currentViewMode = "cards"; // "cards" | "list"
 let currentPickupDateFilter = ""; // "" means all dates
+let currentRegDateFilter = ""; // "" means all registration dates
 let currentPage = 1;
 const PAGE_SIZE = 10;
 
@@ -622,6 +625,27 @@ function setupDateFilterAndPaginationEvents() {
             renderBookings();
         });
     }
+    if (filterRegDate) {
+        filterRegDate.addEventListener("change", () => {
+            currentRegDateFilter = filterRegDate.value;
+            if (currentRegDateFilter) {
+                if (btnClearRegDate) btnClearRegDate.classList.remove("hidden");
+            } else {
+                if (btnClearRegDate) btnClearRegDate.classList.add("hidden");
+            }
+            currentPage = 1;
+            renderBookings();
+        });
+    }
+    if (btnClearRegDate) {
+        btnClearRegDate.addEventListener("click", () => {
+            if (filterRegDate) filterRegDate.value = "";
+            currentRegDateFilter = "";
+            btnClearRegDate.classList.add("hidden");
+            currentPage = 1;
+            renderBookings();
+        });
+    }
     if (btnPrevPage) {
         btnPrevPage.addEventListener("click", () => {
             if (currentPage > 1) {
@@ -919,6 +943,34 @@ function renderBookings() {
     if (currentPickupDateFilter) {
         filteredBookings = filteredBookings.filter(b => {
             return b.trip_details && b.trip_details.pickup_date === currentPickupDateFilter;
+        });
+    }
+
+    // Utility helper to format creation_ts (Timestamp object, ISO string, or Date) as YYYY-MM-DD
+    const getRegDateString = (booking) => {
+        if (!booking.creation_ts) return null;
+        let d = null;
+        if (typeof booking.creation_ts === "object" && booking.creation_ts.seconds) {
+            d = new Date(booking.creation_ts.seconds * 1000);
+        } else if (typeof booking.creation_ts === "string") {
+            d = new Date(booking.creation_ts);
+        } else if (booking.creation_ts instanceof Date) {
+            d = booking.creation_ts;
+        }
+        if (d && !isNaN(d.getTime())) {
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, "0");
+            const dd = String(d.getDate()).padStart(2, "0");
+            return `${yyyy}-${mm}-${dd}`;
+        }
+        return null;
+    };
+
+    // Apply booking registration date filter
+    if (currentRegDateFilter) {
+        filteredBookings = filteredBookings.filter(b => {
+            const regDate = getRegDateString(b);
+            return regDate === currentRegDateFilter;
         });
     }
 
@@ -1578,8 +1630,10 @@ async function loadFaresMatrix() {
         const globalRules = rates.global || {};
         const nightStartInput = document.getElementById("global-night-start");
         const nightEndInput = document.getElementById("global-night-end");
+        const localIncludedKmInput = document.getElementById("global-local-included-km");
         if (nightStartInput) nightStartInput.value = globalRules.night_charge_start ?? "23:59";
         if (nightEndInput) nightEndInput.value = globalRules.night_charge_end ?? "06:00";
+        if (localIncludedKmInput) localIncludedKmInput.value = globalRules.local_included_km ?? 10;
 
     } catch (err) {
         console.error("Failed to load fare configurations:", err);
@@ -1629,7 +1683,8 @@ async function handleFaresFormSubmit(e) {
 
     const globalRules = {
         night_charge_start: document.getElementById("global-night-start").value || "23:59",
-        night_charge_end: document.getElementById("global-night-end").value || "06:00"
+        night_charge_end: document.getElementById("global-night-end").value || "06:00",
+        local_included_km: parseFloat(document.getElementById("global-local-included-km").value) || 10
     };
 
     const payload = {

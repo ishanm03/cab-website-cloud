@@ -100,6 +100,7 @@ class GlobalRates(BaseModel):
     night_charge_start: str
     night_charge_end: str
     gst_percentage: float = 5.0
+    local_included_km: Optional[float] = 10.0
 
 class SettingsRatesResponse(BaseModel):
     local: Dict[str, LocalRates]

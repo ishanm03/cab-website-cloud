@@ -319,7 +319,8 @@ $$\text{Outstation Fare} = \text{Outstation Distance} \times R_{\text{km}} + \le
 
 #### Category C: Fallback Local Rides
 Standard local rides are calculated dynamically:
-$$\text{Local Fare} = \text{Base Cost} + \max(0, d - 10) \times R_{\text{km}} + \text{Night Charge}$$
+$$\text{Local Fare} = \text{Base Cost} + \max(0, d - d_{\text{inc}}) \times R_{\text{km}} + \text{Night Charge}$$
+* *Parameters*: $d$ = distance in km, $d_{\text{inc}}$ = configurable local included km threshold (stored in `global.local_included_km` settings, defaulting to `10`), $R_{\text{km}}$ = extra km rate.
 
 #### Night Charge Condition
 A night-charge multiplier is added if the pickup time string ($t$) falls within the night time window:

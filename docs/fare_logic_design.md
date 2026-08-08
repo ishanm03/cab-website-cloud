@@ -7,7 +7,7 @@ This document serves as the single source of truth for all pricing models within
 ## 1. Local Ride Pricing Model
 
 ### Vehicle Categories & Parameters
-| Category | Base Fare (0-10 KM) | Extra Distance Rate | Waiting Charge | Night Charge |
+| Category | Base Fare (0-d_inc KM) | Extra Distance Rate | Waiting Charge | Night Charge |
 | :--- | :---: | :---: | :---: | :---: |
 | **Compact Ride** | ₹550 | ₹12 / KM | ₹3 / Minute | ₹200 |
 | **Premium Ride** | ₹650 | ₹13 / KM | ₹4 / Minute | ₹300 |
@@ -15,9 +15,9 @@ This document serves as the single source of truth for all pricing models within
 | **Group MUV (12 Seater)** | ₹850 | ₹15 / KM | ₹5 / Minute | ₹500 |
 
 ### Rules & Sequence
-1. **Base Fare**: Start with the selected category's base rate (includes up to 10 KM).
+1. **Base Fare**: Start with the selected category's base rate (includes up to $d_{\text{inc}}$ KM, configurable under Global Rules settings, defaulting to 10 KM).
 2. **Extra Distance**:
-   $$\text{Extra Distance Charge} = \max(0, \text{Total Distance} - 10) \times \text{Extra KM Rate}$$
+   $$\text{Extra Distance Charge} = \max(0, \text{Total Distance} - d_{\text{inc}}) \times \text{Extra KM Rate}$$
 3. **Waiting Charge**:
    $$\text{Waiting Charge} = \text{Waiting Minutes} \times \text{Waiting Rate}$$
 4. **Night Charge**: Apply the flat category-specific Night Charge if the ride starts between **11:59 PM and 6:00 AM**. Otherwise, ₹0.
@@ -108,7 +108,8 @@ To ensure future ride categories, pricing rates, and fees can be updated without
   },
   "global": {
     "night_charge_start": "23:59",
-    "night_charge_end": "06:00"
+    "night_charge_end": "06:00",
+    "local_included_km": 10
   }
 }
 ```

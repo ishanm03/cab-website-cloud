@@ -184,6 +184,15 @@
                         </button>
                     </div>
 
+                    <!-- Reg Date Filter -->
+                    <div class="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 items-center justify-between sm:justify-start gap-1.5 px-4">
+                        <span class="text-[10px] uppercase font-bold tracking-wider text-slate-500 whitespace-nowrap">Reg Date:</span>
+                        <input type="date" id="filter-reg-date" class="bg-transparent text-white border-0 outline-none text-xs font-bold focus:ring-0 cursor-pointer min-w-[120px] filter-date-picker">
+                        <button type="button" id="btn-clear-reg-date" class="text-slate-500 hover:text-white text-xs font-bold px-1.5 py-0.5 rounded transition-colors hidden">
+                            ✕
+                        </button>
+                    </div>
+
                     <!-- View Switcher -->
                     <div class="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 gap-1 flex-grow sm:flex-initial">
                         <button type="button" id="btn-view-cards" class="flex-1 lg:flex-initial px-4 py-2.5 text-xs font-bold rounded-xl text-amber-500 bg-slate-900 transition-all duration-200 flex items-center justify-center gap-1.5">
@@ -722,6 +731,16 @@
                                     <div>
                                         <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Night Charge End Time (24h)</label>
                                         <input type="text" id="global-night-end" required placeholder="E.g. 06:00" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="border border-slate-800/80 rounded-2xl p-5 space-y-4">
+                                <h4 class="font-extrabold text-amber-400 text-xs uppercase tracking-wider">Local Rides Configuration</h4>
+                                <div class="grid grid-cols-1 gap-4">
+                                    <div>
+                                        <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Local Included KM (Before Extra KM Rates Apply)</label>
+                                        <input type="number" id="global-local-included-km" required min="1" placeholder="E.g. 10" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2 rounded-xl outline-none text-sm">
                                     </div>
                                 </div>
                             </div>

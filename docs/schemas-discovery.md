@@ -227,6 +227,7 @@ Dynamic tariff specifications for the three core ride models (Local, Rental, Int
 ##### 4. `rates.global` (Global system-wide config thresholds)
 * **night_charge_start**: `"23:59"` (Night charge timing window start)
 * **night_charge_end**: `"06:00"` (Night charge timing window end)
+* **local_included_km**: `10.0` (Local point-to-point transfers distance limit before extra KM charge applies)
 
 ---
 
