@@ -219,7 +219,7 @@ async function handleAuthStateChange(user) {
                     auth_provider: "password"
                 };
                 // Ensure profile exists in Firestore and is marked as admin
-                await dbService.saveUserProfile(user.uid, adminProfile);
+                await dbService.saveUserProfile(loggedInUser.uid, adminProfile);
                 utils.showAlert(authAlert, "Admin authentication successful! Redirecting...", "success");
                 setTimeout(() => {
                     window.location.href = "../admin/admin.html";
