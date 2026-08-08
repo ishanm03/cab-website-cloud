@@ -200,14 +200,17 @@ async function handleAuthStateChange(user) {
         }
     }
 
-    if (user) {
-        currentUser = user;
+    const isAdminSession = localStorage.getItem("admin_poc_session") === "true";
+    const loggedInUser = isAdminSession ? { email: "admin@sethcabs.com", uid: "admin_poc_uid" } : user;
+
+    if (loggedInUser) {
+        currentUser = loggedInUser;
         showLoader("Checking user profile details...");
         try {
             // Check if the user is the Admin
-            if (user.email === "admin@sethcabs.com") {
+            if (loggedInUser.email === "admin@sethcabs.com") {
                 const adminProfile = {
-                    uid: user.uid,
+                    uid: loggedInUser.uid,
                     name: "Admin Manager",
                     city: "Kolkata",
                     phone: "+919999999999",

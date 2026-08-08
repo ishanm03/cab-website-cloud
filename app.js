@@ -24,7 +24,7 @@ function initAuthObserver() {
     // Listen to Firebase Auth state updates
     onAuthStateChanged(auth, (user) => {
         const isAdminSession = localStorage.getItem("admin_poc_session") === "true";
-        const loggedInUser = user || (isAdminSession ? { email: "admin@sethcabs.com" } : null);
+        const loggedInUser = isAdminSession ? { email: "admin@sethcabs.com" } : user;
 
         if (loggedInUser) {
             isUserLoggedIn = true;
