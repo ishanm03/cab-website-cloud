@@ -195,15 +195,21 @@ async function handleUserSessionChange(user) {
         currentUser = null;
         currentProfile = null;
         // User not logged in -> redirect back to login page
-        window.location.href = "../auth/auth.html";
+        if (!isLoggingOut) {
+            window.location.href = "../auth/auth.html?msg=login_required";
+        }
     }
 }
+
+let isLoggingOut = false;
 
 // Header Log-off handler
 async function handleLogout() {
     const confirmSignout = confirm("Are you sure you want to log out?");
     if (confirmSignout) {
+        isLoggingOut = true;
         await authService.logout();
+        window.location.href = "../auth/auth.html?logout=true";
     }
 }
 

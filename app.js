@@ -102,10 +102,10 @@ function initAuthObserver() {
     // Intercept clicks on the auth status button
     authNavBtn.addEventListener("click", async (e) => {
         const isAdminSession = localStorage.getItem("admin_poc_session") === "true";
-        const loggedInUser = user || (isAdminSession ? { email: "admin@sethcabs.com" } : null);
+        const loggedInUser = auth.currentUser || (isAdminSession ? { email: "admin@sethcabs.com" } : null);
 
         if (loggedInUser) {
-            isUserLoggedIn = true;
+            e.preventDefault(); // Stop default routing
             const email = loggedInUser.email || "";
 
             if (email === "admin@sethcabs.com") {
@@ -119,6 +119,7 @@ function initAuthObserver() {
                 try {
                     await authService.logout();
                     console.log("Successfully logged out!");
+                    window.location.reload();
                 } catch (error) {
                     console.error("SethCabs: Error during header logout:", error);
                 }

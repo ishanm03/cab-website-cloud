@@ -1346,7 +1346,7 @@ async function handleLogout() {
             if (firebaseAuthUnsubscribe) firebaseAuthUnsubscribe();
             
             await authService.logout();
-            window.location.href = "../auth/auth.html";
+            window.location.href = "../auth/auth.html?logout=true";
         } catch (error) {
             console.error("IshanCabs: Admin Logout Error:", error);
             utils.showAlert(adminAlert, "Sign out failed: " + error.message);

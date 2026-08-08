@@ -192,6 +192,14 @@ function hideLoader(showMethods = true) {
 
 // Listener for Firebase State Checks
 async function handleAuthStateChange(user) {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("logout") === "true") {
+        if (user) {
+            await authService.logout();
+            return;
+        }
+    }
+
     if (user) {
         currentUser = user;
         showLoader("Checking user profile details...");
