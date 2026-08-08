@@ -3449,7 +3449,9 @@ async function updateAdminRouteAndFare() {
     const submitBtn = adminBookingForm.querySelector('button[type="submit"]');
     if (submitBtn) {
         let text = `Log Booking Request (Est: ₹${currentAdminEstimatedFare})`;
-        if (category !== "rental" && (isPickupCustom || isDropCustom) && (!pickupCoords || !dropCoords)) {
+        if (category !== "rental" && (!pickup || !drop)) {
+            text = `Log Booking Request (Est. Base Fare: ₹${currentAdminEstimatedFare})`;
+        } else if (category !== "rental" && (isPickupCustom || isDropCustom) && (!pickupCoords || !dropCoords)) {
             text = `Log Booking Request (Pending Map Pin - Est: Base fare ₹${currentAdminEstimatedFare})`;
         }
         submitBtn.textContent = text;
