@@ -4,3 +4,4 @@ __pycache__/
 .env
 service-account.json
 *.json
+!backend/app/resources/initial_seed_rates.json
