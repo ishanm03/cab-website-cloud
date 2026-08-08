@@ -1,6 +1,7 @@
 # terraform/environments/dev/dev.tfvars
 
 project_id        = "ishancabproject"
+# Target GCP Region (matches GCS tfstate bucket location)
 region            = "asia-east1"
 environment       = "dev"
 app_name          = "sethcabs"
