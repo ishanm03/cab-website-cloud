@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # Super Admin emails authorized to promote/demote user roles
     SUPER_ADMIN_EMAILS: List[str] = Field(
-        default=["admin@sethcabs.com"],
+        default=["admin@sethcabs.com", "admin@ishancabs.com"],
         validation_alias="SUPER_ADMIN_EMAILS"
     )
 

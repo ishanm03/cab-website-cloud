@@ -342,7 +342,7 @@ async function handleAdminSessionChange(user) {
     const isAdminSession = localStorage.getItem("admin_poc_session") === "true";
     const loggedInUser = isAdminSession ? { email: "admin@sethcabs.com" } : user;
 
-    if (loggedInUser && loggedInUser.email === "admin@sethcabs.com") {
+    if (loggedInUser && (loggedInUser.email === "admin@sethcabs.com" || loggedInUser.email === "admin@ishancabs.com")) {
         adminWelcome.textContent = `Welcome, Admin`;
         utils.showElement(adminWelcome);
         

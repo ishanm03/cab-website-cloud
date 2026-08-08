@@ -213,14 +213,14 @@ async function handleAuthStateChange(user) {
         try {
             console.log("[Auth Debug] User email matching admin config:", loggedInUser.email);
             // Check if the user is the Admin
-            if (loggedInUser.email === "admin@sethcabs.com") {
-                console.log("[Auth Debug] Match admin@sethcabs.com! Proceeding with admin profile write & redirect.");
+            if (loggedInUser.email === "admin@sethcabs.com" || loggedInUser.email === "admin@ishancabs.com") {
+                console.log("[Auth Debug] Match admin account! Proceeding with admin profile write & redirect.");
                 const adminProfile = {
                     uid: loggedInUser.uid,
                     name: "Admin Manager",
                     city: "Kolkata",
                     phone: "+919999999999",
-                    email: "admin@sethcabs.com",
+                    email: loggedInUser.email,
                     role: "admin",
                     auth_provider: "password"
                 };

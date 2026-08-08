@@ -30,7 +30,7 @@ function initAuthObserver() {
             isUserLoggedIn = true;
             const email = loggedInUser.email || "";
 
-            if (email === "admin@sethcabs.com") {
+            if (email === "admin@sethcabs.com" || email === "admin@ishancabs.com") {
                 // Admin State - Redirection headers
                 authNavText.textContent = "Admin Panel";
                 authNavBtn.classList.remove("hover:border-rose-500", "hover:border-amber-400");
@@ -108,7 +108,7 @@ function initAuthObserver() {
             e.preventDefault(); // Stop default routing
             const email = loggedInUser.email || "";
 
-            if (email === "admin@sethcabs.com") {
+            if (email === "admin@sethcabs.com" || email === "admin@ishancabs.com") {
                 // Route directly to Admin Dashboard page
                 window.location.href = "./modules/admin/admin.html";
                 return;
