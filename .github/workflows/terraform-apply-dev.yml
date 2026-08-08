@@ -1,0 +1,41 @@
+# .github/workflows/terraform-apply-dev.yml
+name: Terraform Apply (Dev)
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-apply-dev.yml'
+  workflow_dispatch:
+
+jobs:
+  apply:
+    name: Terraform Init & Apply
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.7.0'
+
+      - name: Terraform Init
+        run: |
+          cd terraform/environments/dev
+          terraform init -backend-config="bucket=${{ vars.GCP_PROJECT_ID }}-tfstate-dev" -backend-config="prefix=terraform/state"
+
+      - name: Terraform Apply
+        run: |
+          cd terraform/environments/dev
+          terraform apply -auto-approve -var-file="dev.tfvars" -var="project_id=${{ vars.GCP_PROJECT_ID }}"

@@ -1,18 +1,23 @@
-# .github/workflows/terraform-provision-dev.yml
-name: Terraform Provision (Dev)
+# .github/workflows/terraform-plan-dev.yml
+name: Terraform Plan (Dev)
 
 on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/terraform-plan-dev.yml'
   push:
-    branches:
+    branches-ignore:
       - main
       - dev
     paths:
       - 'terraform/**'
-      - '.github/workflows/terraform-provision-dev.yml'
+      - '.github/workflows/terraform-plan-dev.yml'
+  workflow_dispatch:
 
 jobs:
-  terraform:
-    name: Terraform Init, Plan & Apply
+  plan:
+    name: Terraform Init & Plan
     runs-on: ubuntu-latest
 
     steps:
@@ -38,8 +43,3 @@ jobs:
         run: |
           cd terraform/environments/dev
           terraform plan -var-file="dev.tfvars" -var="project_id=${{ vars.GCP_PROJECT_ID }}"
-
-      - name: Terraform Apply
-        run: |
-          cd terraform/environments/dev
-          terraform apply -auto-approve -var-file="dev.tfvars" -var="project_id=${{ vars.GCP_PROJECT_ID }}"
