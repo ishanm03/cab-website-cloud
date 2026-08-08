@@ -52,14 +52,14 @@ const authService = {
     async loginWithEmail(email, password) {
         if (!auth) throw new Error("Firebase Auth is not initialized.");
 
-        // For the PoC Admin credentials: admin@ishancabs.com / admin1234
-        if (email.trim() === "admin@ishancabs.com" && password.trim() === "admin1234") {
-            console.log("IshanCabs PoC Override: Admin credentials verified successfully.");
+        // For the PoC Admin credentials: admin@sethcabs.com / admin1234
+        if (email.trim() === "admin@sethcabs.com" && password.trim() === "admin1234") {
+            console.log("SethCabs PoC Override: Admin credentials verified successfully.");
             // Store fallback token/session in localStorage to ensure persistence across refreshes
             localStorage.setItem("admin_poc_session", "true");
             return {
                 uid: "admin_poc_uid",
-                email: "admin@ishancabs.com",
+                email: "admin@sethcabs.com",
                 displayName: "Admin Manager",
                 phoneNumber: "+919999999999",
                 providerData: [{ providerId: "password" }]

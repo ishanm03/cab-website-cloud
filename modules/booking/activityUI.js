@@ -41,7 +41,7 @@ function initActivityUI() {
     // 1. Listen to Auth State changes
     if (auth) {
         onAuthStateChanged(auth, (user) => {
-            if (user && user.email !== "admin@ishancabs.com") {
+            if (user && user.email !== "admin@sethcabs.com") {
                 currentUser = user;
                 utils.showElement(btnRiderActivity);
             } else {

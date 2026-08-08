@@ -97,7 +97,7 @@ function initUI() {
     if (localStorage.getItem("admin_poc_session") === "true") {
         handleAuthStateChange({
             uid: "admin_poc_uid",
-            email: "admin@ishancabs.com",
+            email: "admin@sethcabs.com",
             displayName: "Admin Manager",
             phoneNumber: "+919999999999",
             providerData: [{ providerId: "password" }]
@@ -197,13 +197,13 @@ async function handleAuthStateChange(user) {
         showLoader("Checking user profile details...");
         try {
             // Check if the user is the Admin
-            if (user.email === "admin@ishancabs.com") {
+            if (user.email === "admin@sethcabs.com") {
                 const adminProfile = {
                     uid: user.uid,
                     name: "Admin Manager",
                     city: "Kolkata",
                     phone: "+919999999999",
-                    email: "admin@ishancabs.com",
+                    email: "admin@sethcabs.com",
                     role: "admin",
                     auth_provider: "password"
                 };
@@ -364,7 +364,7 @@ async function handleProfileCompletionSubmit(e) {
         
         utils.hideElement(authLoader);
         utils.showElement(profileCompletionPanel);
-        utils.showAlert(authAlert, "Registration successful! Welcome to IshanCabs.", "success");
+        utils.showAlert(authAlert, "Registration successful! Welcome to SethCabs.", "success");
         
         setTimeout(() => {
             window.location.href = "../../index.html";
