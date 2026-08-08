@@ -1,15 +1,8 @@
 # terraform/environments/dev/backend.tf
 
 terraform {
-  backend "local" {
-    path = "terraform.tfstate"
+  backend "gcs" {
+    bucket = "ishancabproject-tfstate-dev"
+    prefix = "terraform/state"
   }
 }
-
-# Comment out this GCS block for local state. Enable in production CI/CD.
-# terraform {
-#   backend "gcs" {
-#     bucket = "sethcabs-tfstate-dev"
-#     prefix = "terraform/state"
-#   }
-# }
