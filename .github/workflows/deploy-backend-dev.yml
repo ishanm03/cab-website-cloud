@@ -9,6 +9,7 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/deploy-backend-dev.yml'
+  workflow_dispatch:
 
 jobs:
   deploy:

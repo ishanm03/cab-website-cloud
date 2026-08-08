@@ -11,6 +11,7 @@ on:
       - 'terraform/**'
       - '.github/workflows/deploy-backend-dev.yml'
       - '.github/workflows/deploy-frontend-dev.yml'
+  workflow_dispatch:
 
 jobs:
   deploy:
