@@ -52,6 +52,13 @@ const authService = {
     async loginWithEmail(email, password) {
         if (!auth) throw new Error("Firebase Auth is not initialized.");
 
+        // Clear any existing Firebase Auth session to prevent account conflicts
+        try {
+            await signOut(auth);
+        } catch (err) {
+            console.warn("Auth session clear failed:", err);
+        }
+
         // For the PoC Admin credentials: admin@sethcabs.com / admin1234
         if (email.trim() === "admin@sethcabs.com" && password.trim() === "admin1234") {
             console.log("SethCabs PoC Override: Admin credentials verified successfully.");
