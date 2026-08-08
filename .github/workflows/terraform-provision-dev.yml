@@ -32,14 +32,14 @@ jobs:
       - name: Terraform Init
         run: |
           cd terraform/environments/dev
-          terraform init
+          terraform init -backend-config="bucket=${{ vars.GCP_PROJECT_ID }}-tfstate-dev" -backend-config="prefix=terraform/state"
 
       - name: Terraform Plan
         run: |
           cd terraform/environments/dev
-          terraform plan -var-file="dev.tfvars"
+          terraform plan -var-file="dev.tfvars" -var="project_id=${{ vars.GCP_PROJECT_ID }}"
 
       - name: Terraform Apply
         run: |
           cd terraform/environments/dev
-          terraform apply -auto-approve -var-file="dev.tfvars"
+          terraform apply -auto-approve -var-file="dev.tfvars" -var="project_id=${{ vars.GCP_PROJECT_ID }}"

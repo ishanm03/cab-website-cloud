@@ -27,7 +27,7 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
-          project_id: ishancabproject
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Configure Docker authentication
         run: |
@@ -42,14 +42,14 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
-          tags: asia-east1-docker.pkg.dev/ishancabproject/sethcabs-backend-dev/app:latest
+          tags: asia-east1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/sethcabs-backend-dev/app:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy sethcabs-backend-dev \
-            --image asia-east1-docker.pkg.dev/ishancabproject/sethcabs-backend-dev/app:latest \
+            --image asia-east1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/sethcabs-backend-dev/app:latest \
             --region asia-east1 \
             --platform managed
 
