@@ -192,8 +192,10 @@ function hideLoader(showMethods = true) {
 
 // Listener for Firebase State Checks
 async function handleAuthStateChange(user) {
+    console.log("[Auth Debug] handleAuthStateChange triggered. User state:", user);
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get("logout") === "true") {
+        console.log("[Auth Debug] Explicit logout query parameter detected in URL.");
         if (user) {
             await authService.logout();
             return;
@@ -201,14 +203,18 @@ async function handleAuthStateChange(user) {
     }
 
     const isAdminSession = localStorage.getItem("admin_poc_session") === "true";
+    console.log("[Auth Debug] admin_poc_session status in localStorage:", isAdminSession);
     const loggedInUser = isAdminSession ? { email: "admin@sethcabs.com", uid: "admin_poc_uid" } : user;
+    console.log("[Auth Debug] Selected loggedInUser profile:", loggedInUser);
 
     if (loggedInUser) {
         currentUser = loggedInUser;
         showLoader("Checking user profile details...");
         try {
+            console.log("[Auth Debug] User email matching admin config:", loggedInUser.email);
             // Check if the user is the Admin
             if (loggedInUser.email === "admin@sethcabs.com") {
+                console.log("[Auth Debug] Match admin@sethcabs.com! Proceeding with admin profile write & redirect.");
                 const adminProfile = {
                     uid: loggedInUser.uid,
                     name: "Admin Manager",
@@ -220,30 +226,37 @@ async function handleAuthStateChange(user) {
                 };
                 // Ensure profile exists in Firestore and is marked as admin
                 await dbService.saveUserProfile(loggedInUser.uid, adminProfile);
+                console.log("[Auth Debug] Profile save complete. Scheduling redirect to admin.html in 1.2s...");
                 utils.showAlert(authAlert, "Admin authentication successful! Redirecting...", "success");
                 setTimeout(() => {
+                    console.log("[Auth Debug] Executing redirect: window.location.href = '../admin/admin.html'");
                     window.location.href = "../admin/admin.html";
                 }, 1200);
                 return;
             }
 
+            console.log("[Auth Debug] User is NOT admin. Fetching rider profile for UID:", user.uid);
             const profile = await dbService.getUserProfile(user.uid);
+            console.log("[Auth Debug] Rider profile retrieved from DB:", profile);
             if (profile && profile.name && profile.city && profile.phone) {
-                // User already completed profile -> redirect back
+                console.log("[Auth Debug] Rider profile complete. Scheduling redirect to index.html in 1.2s...");
                 utils.showAlert(authAlert, "Successfully logged in! Redirecting...", "success");
                 setTimeout(() => {
+                    console.log("[Auth Debug] Executing rider redirect: window.location.href = '../../index.html'");
                     window.location.href = "../../index.html";
                 }, 1200);
             } else {
-                // First-time user, must capture missing profile info
+                console.log("[Auth Debug] Rider profile incomplete. Directing to profile completion panel.");
                 hideLoader(false);
                 showProfileCompletionPanel(user);
             }
         } catch (error) {
+            console.error("[Auth Debug] Exception caught in handleAuthStateChange:", error);
             hideLoader(true);
             utils.showAlert(authAlert, "Failed to load user credentials: " + error.message);
         }
     } else {
+        console.log("[Auth Debug] loggedInUser is null. Clearing session states.");
         currentUser = null;
         hideLoader(true);
         utils.hideElement(profileCompletionPanel);
