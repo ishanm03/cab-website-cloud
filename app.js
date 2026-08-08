@@ -5,7 +5,7 @@ import { authService } from "./modules/auth/authService.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('IshanCabs app initialized');
+    console.log('SethCabs app initialized');
     initAuthObserver();
 });
 
@@ -24,13 +24,13 @@ function initAuthObserver() {
     // Listen to Firebase Auth state updates
     onAuthStateChanged(auth, (user) => {
         const isAdminSession = localStorage.getItem("admin_poc_session") === "true";
-        const loggedInUser = user || (isAdminSession ? { email: "admin@ishancabs.com" } : null);
+        const loggedInUser = user || (isAdminSession ? { email: "admin@sethcabs.com" } : null);
 
         if (loggedInUser) {
             isUserLoggedIn = true;
             const email = loggedInUser.email || "";
 
-            if (email === "admin@ishancabs.com") {
+            if (email === "admin@sethcabs.com") {
                 // Admin State - Redirection headers
                 authNavText.textContent = "Admin Panel";
                 authNavBtn.classList.remove("hover:border-rose-500", "hover:border-amber-400");
@@ -102,24 +102,25 @@ function initAuthObserver() {
     // Intercept clicks on the auth status button
     authNavBtn.addEventListener("click", async (e) => {
         const isAdminSession = localStorage.getItem("admin_poc_session") === "true";
-        const email = (auth.currentUser ? auth.currentUser.email : "") || (isAdminSession ? "admin@ishancabs.com" : "");
+        const loggedInUser = user || (isAdminSession ? { email: "admin@sethcabs.com" } : null);
 
-        if (isUserLoggedIn) {
-            e.preventDefault(); // Stop default routing
-            
-            if (email === "admin@ishancabs.com") {
+        if (loggedInUser) {
+            isUserLoggedIn = true;
+            const email = loggedInUser.email || "";
+
+            if (email === "admin@sethcabs.com") {
                 // Route directly to Admin Dashboard page
                 window.location.href = "./modules/admin/admin.html";
                 return;
             }
 
-            const confirmLogout = confirm("Are you sure you want to log out of IshanCabs?");
+            const confirmLogout = confirm("Are you sure you want to log out of SethCabs?");
             if (confirmLogout) {
                 try {
                     await authService.logout();
                     console.log("Successfully logged out!");
                 } catch (error) {
-                    console.error("IshanCabs: Error during header logout:", error);
+                    console.error("SethCabs: Error during header logout:", error);
                 }
             }
         }

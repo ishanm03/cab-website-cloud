@@ -204,17 +204,17 @@ def run_tests():
 
             # Test 12: POST /users/promote (Super Admin Endpoint)
             print("Test 12: POST /api/v1/admin/users/promote...")
-            promote_payload = {"email": "newadmin@ishancabs.com", "role": "admin"}
+            promote_payload = {"email": "newadmin@sethcabs.com", "role": "admin"}
             
             # Scenario A: Regular admin (not in SUPER_ADMIN_EMAILS) attempts promote -> 403 Forbidden
             response = client.post("/api/v1/admin/users/promote", json=promote_payload, headers=admin_headers)
             assert response.status_code == 403, f"Expected 403, got {response.status_code}"
             print("✓ Non-Super Admin successfully blocked from role promotions!")
             
-            # Scenario B: Super Admin (admin@ishancabs.com) promotes user
+            # Scenario B: Super Admin (admin@sethcabs.com) promotes user
             super_admin_payload = {
                 "uid": "super_admin_uid",
-                "email": "admin@ishancabs.com",
+                "email": "admin@sethcabs.com",
                 "admin": True
             }
             super_admin_headers = {"Authorization": "Bearer mock_super_admin_token"}

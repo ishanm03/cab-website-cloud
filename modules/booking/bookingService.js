@@ -213,7 +213,7 @@ const bookingService = {
     compileWhatsAppLink(booking) {
         const supportPhone = "918981538038"; // Dispatch center phone
         
-        const text = `🚖 *IshanCabs: New Ride Booking*
+        const text = `🚖 *SethCabs: New Ride Booking*
 
 *Booking ID:* ${booking.booking_id}
 *Customer:* ${booking.customer_details.name} (${booking.customer_details.phone})

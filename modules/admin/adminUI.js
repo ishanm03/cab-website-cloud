@@ -340,9 +340,9 @@ function initAdminUI() {
 // Security: Force rerouting if user is not authorized as Admin
 async function handleAdminSessionChange(user) {
     const isAdminSession = localStorage.getItem("admin_poc_session") === "true";
-    const loggedInUser = user || (isAdminSession ? { email: "admin@ishancabs.com" } : null);
+    const loggedInUser = user || (isAdminSession ? { email: "admin@sethcabs.com" } : null);
 
-    if (loggedInUser && loggedInUser.email === "admin@ishancabs.com") {
+    if (loggedInUser && loggedInUser.email === "admin@sethcabs.com") {
         adminWelcome.textContent = `Welcome, Admin`;
         utils.showElement(adminWelcome);
         

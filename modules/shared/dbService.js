@@ -76,7 +76,7 @@ const dbService = {
         if (uid === "admin_poc_uid") {
             return {
                 uid: "admin_poc_uid",
-                email: "admin@ishancabs.com",
+                email: "admin@sethcabs.com",
                 name: "Admin Manager",
                 phone: "+919999999999",
                 status: "active",
