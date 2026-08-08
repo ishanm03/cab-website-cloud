@@ -161,9 +161,10 @@ def run_tests():
             print("Test 10: POST /api/v1/admin/sync-schemas...")
             # Mock streams to avoid errors in seeding loop
             mock_db.collection.return_value.stream.return_value = []
+            mock_db.collection.return_value.limit.return_value.stream.return_value = []
             mock_db.collection.return_value.document.return_value.get.return_value.exists = False
             response = client.post("/api/v1/admin/sync-schemas", headers=admin_headers)
-            assert response.status_code == 200
+            assert response.status_code == 200, f"Expected 200, got {response.status_code}. Response: {response.text}"
             assert response.json()["status"] == "success"
             print("✓ Schema sync operations validated successfully!")
 
