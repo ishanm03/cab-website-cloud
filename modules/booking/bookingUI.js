@@ -516,7 +516,7 @@ function updateMarkerPopup(marker, text) {
 async function geocodeAddress(address) {
     if (!address) return null;
     try {
-        const query = encodeURIComponent(address + ", Kolkata, West Bengal, India");
+        const query = encodeURIComponent(address + ", West Bengal, India");
         const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
             headers: { 'Accept-Language': 'en' }
         });

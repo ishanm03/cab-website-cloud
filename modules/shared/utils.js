@@ -62,7 +62,7 @@ const utils = {
      */
     showAlert(alertElement, message, type = "error") {
         if (!alertElement) return;
-        alertElement.textContent = message;
+        alertElement.innerHTML = message;
         alertElement.className = "p-4 rounded-xl text-sm font-semibold mb-4 transition-all duration-300";
         
         if (type === "success") {

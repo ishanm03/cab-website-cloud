@@ -2920,7 +2920,7 @@ async function geocodeAndPositionMarkers(pickupText, dropText) {
     let pCoords = null;
     if (pickupText) {
         try {
-            const query = encodeURIComponent(pickupText + ", Kolkata, West Bengal, India");
+            const query = encodeURIComponent(pickupText + ", West Bengal, India");
             const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
                 headers: { 'Accept-Language': 'en' }
             });
@@ -2938,7 +2938,7 @@ async function geocodeAndPositionMarkers(pickupText, dropText) {
     let dCoords = null;
     if (dropText) {
         try {
-            const query = encodeURIComponent(dropText + ", Kolkata, West Bengal, India");
+            const query = encodeURIComponent(dropText + ", West Bengal, India");
             const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
                 headers: { 'Accept-Language': 'en' }
             });
