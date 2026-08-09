@@ -863,7 +863,7 @@ async function handleStep1Submit(e) {
 
     // Update Step 2 badge distance total
     if (isCustomBooking) {
-        routeKmBadge.textContent = "Estimated: -- km (Custom Route)";
+        routeKmBadge.textContent = `Estimated: ${currentRouteData.km} km (Custom Route)`;
     } else {
         routeKmBadge.textContent = `Estimated: ${currentRouteData.km} km`;
     }
