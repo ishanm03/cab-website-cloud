@@ -78,12 +78,25 @@ def calculate_fare_breakdown(
         incl_km = float(config.get("included_km", 0.0))
         incl_hours = float(config.get("included_hours", 0.0))
         
-        extra_km_charge = max(0.0, actual_distance - incl_km) * float(config.get("extra_km_rate", 0.0))
-        extra_hour_charge = max(0.0, float(actual_hours) - incl_hours) * float(config.get("extra_hour_rate", 0.0))
+        extra_km = max(0.0, actual_distance - incl_km)
+        extra_km_charge = extra_km * float(config.get("extra_km_rate", 0.0))
+        extra_hours = max(0.0, float(actual_hours) - incl_hours)
+        extra_hour_charge = extra_hours * float(config.get("extra_hour_rate", 0.0))
         night_charge = float(config.get("night_charge", 0.0)) if night_applies else 0.0
         discount = float(config.get("default_discount", 0.0))
         
         subtotal = base_fare + extra_km_charge + extra_hour_charge + night_charge - discount
+        
+        logic_desc = f"Base Pkg: ₹{int(base_fare)} ({int(incl_hours)}h/{int(incl_km)}km)"
+        if extra_km > 0:
+            logic_desc += f" | Extra KM: {extra_km}km @ ₹{config.get('extra_km_rate')}/km = ₹{int(extra_km_charge)}"
+        if extra_hours > 0:
+            logic_desc += f" | Extra Hrs: {extra_hours}h @ ₹{config.get('extra_hour_rate')}/h = ₹{int(extra_hour_charge)}"
+        if night_charge > 0:
+            logic_desc += f" | Night: ₹{int(night_charge)}"
+        if discount > 0:
+            logic_desc += f" | Discount: -₹{int(discount)}"
+
         return {
             "base_fare": base_fare,
             "extra_km_charge": extra_km_charge,
@@ -92,7 +105,8 @@ def calculate_fare_breakdown(
             "driver_allowance": 0.0,
             "night_halt": 0.0,
             "discount": discount,
-            "total": float(max(0.0, round(subtotal)))
+            "total": float(max(0.0, round(subtotal))),
+            "description": logic_desc
         }
 
     # 2. Flat routes matrix override (Local or Intercity)
@@ -106,6 +120,7 @@ def calculate_fare_breakdown(
         else:
             val = flat_metrics.get("base_fare_muv") or round((flat_metrics.get("base_fare_suv") or 1000) * 1.25)
         
+        logic_desc = f"Flat Rate: ₹{int(val)} (Predefined route matching)"
         return {
             "base_fare": float(val),
             "extra_km_charge": 0.0,
@@ -114,7 +129,8 @@ def calculate_fare_breakdown(
             "driver_allowance": 0.0,
             "night_halt": 0.0,
             "discount": 0.0,
-            "total": float(val)
+            "total": float(val),
+            "description": logic_desc
         }
 
     # 3. Intercity Outstation (Round-Trip pricing for empty return back mileage)
@@ -138,6 +154,13 @@ def calculate_fare_breakdown(
         
         total = base_fare + driver_allowance + night_halt
         print(f"[UAT-2] Backend Fare Calculation -> ride_type: {ride_type}, actual_distance: {actual_distance}, fixed_days: {fixed_days}, billable_km: {billable_km}, total: {total}")
+        
+        logic_desc = f"Base: {int(billable_km)} km (Min {int(min_billed_km)} km vs Round-Trip {int(round_trip_dist)} km) @ ₹{config.get('rate_per_km')}/km = ₹{int(base_fare)}"
+        if driver_allowance > 0:
+            logic_desc += f" | Driver: ₹{int(driver_allowance)}"
+        if night_halt > 0:
+            logic_desc += f" | Night Halt: ₹{int(night_halt)}"
+
         return {
             "base_fare": base_fare,
             "extra_km_charge": 0.0,
@@ -146,7 +169,8 @@ def calculate_fare_breakdown(
             "driver_allowance": driver_allowance,
             "night_halt": night_halt,
             "discount": 0.0,
-            "total": float(round(total))
+            "total": float(round(total)),
+            "description": logic_desc
         }
         
     # 4. Fallback Local Ride pricing
@@ -160,10 +184,18 @@ def calculate_fare_breakdown(
         config = category_rates[tier]
         
         base_fare = float(config.get("base_fare", 0.0))
-        extra_km_charge = max(0.0, actual_distance - local_included_km) * float(config.get("extra_km_rate", 0.0))
+        extra_km = max(0.0, actual_distance - local_included_km)
+        extra_km_charge = extra_km * float(config.get("extra_km_rate", 0.0))
         night_charge = float(config.get("night_charge", 0.0)) if night_applies else 0.0
         
         total = base_fare + extra_km_charge + night_charge
+        
+        logic_desc = f"Base: ₹{int(base_fare)} (inc. {int(local_included_km)}km)"
+        if extra_km > 0:
+            logic_desc += f" | Extra: {extra_km}km @ ₹{config.get('extra_km_rate')}/km = ₹{int(extra_km_charge)}"
+        if night_charge > 0:
+            logic_desc += f" | Night: ₹{int(night_charge)}"
+
         return {
             "base_fare": base_fare,
             "extra_km_charge": extra_km_charge,
@@ -172,7 +204,8 @@ def calculate_fare_breakdown(
             "driver_allowance": 0.0,
             "night_halt": 0.0,
             "discount": 0.0,
-            "total": float(round(total))
+            "total": float(round(total)),
+            "description": logic_desc
         }
 
 def calculate_fare(

@@ -86,18 +86,28 @@ const bookingService = {
         let discount = 0;
         let total = 0;
 
+        let logicDesc = "";
+
         // 1. Hourly rental calculations
         if (rideType === "rental") {
             baseFare = parseFloat(config.base_fare) || 0;
             const inclKm = parseFloat(config.included_km) || 0;
             const inclHours = parseFloat(config.included_hours) || 0;
             
-            extraKmCharge = Math.max(0, actualDistance - inclKm) * (parseFloat(config.extra_km_rate) || 0);
-            extraHourCharge = Math.max(0, actualHours - inclHours) * (parseFloat(config.extra_hour_rate) || 0);
+            const extraKm = Math.max(0, actualDistance - inclKm);
+            extraKmCharge = extraKm * (parseFloat(config.extra_km_rate) || 0);
+            const extraHrs = Math.max(0, actualHours - inclHours);
+            extraHourCharge = extraHrs * (parseFloat(config.extra_hour_rate) || 0);
             nightCharge = nightApplies ? (parseFloat(config.night_charge) || 0) : 0;
             discount = parseFloat(config.default_discount) || 0;
             
             total = Math.max(0, Math.round(baseFare + extraKmCharge + extraHourCharge + nightCharge - discount));
+
+            logicDesc = `Base Pkg: ₹${baseFare} (${inclHours}h/${inclKm}km)`;
+            if (extraKm > 0) logicDesc += ` | Extra KM: ${extraKm}km @ ₹${config.extra_km_rate}/km = ₹${Math.round(extraKmCharge)}`;
+            if (extraHrs > 0) logicDesc += ` | Extra Hrs: ${extraHrs}h @ ₹${config.extra_hour_rate}/h = ₹${Math.round(extraHourCharge)}`;
+            if (nightCharge > 0) logicDesc += ` | Night: ₹${nightCharge}`;
+            if (discount > 0) logicDesc += ` | Discount: -₹${discount}`;
         }
         // 2. If Local / Intercity and flat-rates are mapped in our routesMatrix, use them!
         else if ((rideType === "local" || rideType === "intercity") && flatMetrics) {
@@ -109,6 +119,8 @@ const bookingService = {
             
             baseFare = val;
             total = Math.round(val);
+
+            logicDesc = `Flat Rate: ₹${baseFare} (Predefined route matching)`;
         }
         // 3. Fallback or Outstation / Intercity computations (Round-Trip empty return back charging)
         else if (rideType === "outstation" || rideType === "intercity") {
@@ -116,20 +128,30 @@ const bookingService = {
             const fixedDays = 1; // Outstation/Intercity duration internally always defaults to 1
             const minimumBilledDistance = fixedDays * (parseFloat(config.min_km_per_day) || 250);
             const finalBilledDistance = Math.max(finalDistance, minimumBilledDistance);
+            const ratePerKm = parseFloat(config.rate_per_km) || 0;
             
-            baseFare = finalBilledDistance * (parseFloat(config.rate_per_km) || 0);
+            baseFare = finalBilledDistance * ratePerKm;
             driverAllowance = fixedDays * (parseFloat(config.driver_allowance) || 0);
             nightHalt = Math.max(0, fixedDays - 1) * (parseFloat(config.night_halt) || 0);
             
             total = Math.round(baseFare + driverAllowance + nightHalt);
+
+            logicDesc = `Base: ${finalBilledDistance} km (Min ${minimumBilledDistance} km vs Round-Trip ${finalDistance} km) @ ₹${ratePerKm}/km = ₹${Math.round(baseFare)}`;
+            if (driverAllowance > 0) logicDesc += ` | Driver: ₹${driverAllowance}`;
+            if (nightHalt > 0) logicDesc += ` | Night Halt: ₹${nightHalt}`;
         }
         // 4. Local custom estimation fallback
         else {
             baseFare = parseFloat(config.base_fare) || 0;
-            extraKmCharge = Math.max(0, actualDistance - localIncludedKm) * (parseFloat(config.extra_km_rate) || 0);
+            const extraKm = Math.max(0, actualDistance - localIncludedKm);
+            extraKmCharge = extraKm * (parseFloat(config.extra_km_rate) || 0);
             nightCharge = nightApplies ? (parseFloat(config.night_charge) || 0) : 0;
             
             total = Math.round(baseFare + extraKmCharge + nightCharge);
+
+            logicDesc = `Base: ₹${baseFare} (inc. ${localIncludedKm}km)`;
+            if (extraKm > 0) logicDesc += ` | Extra: ${extraKm}km @ ₹${config.extra_km_rate}/km = ₹${Math.round(extraKmCharge)}`;
+            if (nightCharge > 0) logicDesc += ` | Night: ₹${nightCharge}`;
         }
 
         const breakdown = {
@@ -140,7 +162,8 @@ const bookingService = {
             driver_allowance: Math.round(driverAllowance),
             night_halt: Math.round(nightHalt),
             discount: Math.round(discount),
-            total: Math.round(total)
+            total: Math.round(total),
+            description: logicDesc
         };
 
         console.log("[UAT-2] Fare Calculation Request -> Ride Type:", rideType, "Distance:", distance, "Days:", days, "Tier:", tier);
