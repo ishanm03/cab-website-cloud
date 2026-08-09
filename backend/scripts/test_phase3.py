@@ -47,7 +47,19 @@ def run_tests():
         }
         mock_booking_stream.append(mock_b)
 
+        mock_rates_doc = MagicMock()
+        mock_rates_doc.exists = True
+        mock_rates_doc.to_dict.return_value = {
+            "default_fleet_sizes": {
+                "compact": 1,
+                "premium": 1,
+                "suv": 1,
+                "muv": 1
+            }
+        }
+
         with patch("app.routers.bookings.db") as mock_db:
+            mock_db.collection.return_value.document.return_value.get.return_value = mock_rates_doc
             mock_db.collection.return_value.where.return_value.stream.return_value = mock_vehicle_stream
             mock_db.collection.return_value.where.return_value.where.return_value.stream.return_value = mock_booking_stream
             
@@ -77,7 +89,9 @@ def run_tests():
         mock_rates_doc.exists = True
         mock_rates_doc.to_dict.return_value = {
             "rates": {
-                "premium": { "rate_per_km": 12.0, "driver_allowance_per_day": 300.0, "rate_per_hour": 150.0, "base_cost": 300.0 }
+                "local": {
+                    "premium": { "base_fare": 300.0, "extra_km_rate": 24.0, "night_charge": 150.0 }
+                }
             }
         }
         

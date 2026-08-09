@@ -30,18 +30,24 @@ const bookingService = {
      * @returns {number} Estimated total fare in INR
      */
     calculateFare(rideType, distance, days, tier, flatMetrics, hours = 0, activeRates = null, timeString = null) {
+        const breakdown = this.calculateFareBreakdown(rideType, distance, days, tier, flatMetrics, hours, activeRates, timeString);
+        return breakdown.total;
+    },
+
+    calculateFareBreakdown(rideType, distance, days, tier, flatMetrics, hours = 0, activeRates = null, timeString = null) {
         if (!activeRates) {
-            return 0; // Return 0 if rates have not loaded from Firestore yet
+            return { base_fare: 0, extra_km_charge: 0, extra_hour_charge: 0, night_charge: 0, driver_allowance: 0, night_halt: 0, discount: 0, total: 0 };
         }
         const actualDays = Math.max(1, parseInt(days) || 1);
         const actualDistance = parseFloat(distance) || 0;
         const actualHours = Math.max(1, parseInt(hours) || 1);
         
         const rates = activeRates.rates || activeRates;
-        const categoryMap = rideType === "outstation" ? "intercity" : rideType;
+        const categoryMap = (rideType === "outstation" || rideType === "intercity") ? "intercity" : rideType;
         const categoryConfig = rates[categoryMap];
         if (!categoryConfig || !categoryConfig[tier]) {
-            return 0;
+            console.warn(`[UAT-2] Config mismatch: rideType=${rideType}, categoryMap=${categoryMap}, tier=${tier}`);
+            return { base_fare: 0, extra_km_charge: 0, extra_hour_charge: 0, night_charge: 0, driver_allowance: 0, night_halt: 0, discount: 0, total: 0 };
         }
         const config = categoryConfig[tier];
         
@@ -71,48 +77,77 @@ const bookingService = {
         };
 
         const nightApplies = isNightTime(timeString);
+        let baseFare = 0;
+        let extraKmCharge = 0;
+        let extraHourCharge = 0;
+        let nightCharge = 0;
+        let driverAllowance = 0;
+        let nightHalt = 0;
+        let discount = 0;
+        let total = 0;
 
         // 1. Hourly rental calculations
         if (rideType === "rental") {
-            const baseFare = parseFloat(config.base_fare) || 0;
+            baseFare = parseFloat(config.base_fare) || 0;
             const inclKm = parseFloat(config.included_km) || 0;
             const inclHours = parseFloat(config.included_hours) || 0;
             
-            const extraKmCharge = Math.max(0, actualDistance - inclKm) * (parseFloat(config.extra_km_rate) || 0);
-            const extraHourCharge = Math.max(0, actualHours - inclHours) * (parseFloat(config.extra_hour_rate) || 0);
-            const nightCharge = nightApplies ? (parseFloat(config.night_charge) || 0) : 0;
-            const discount = parseFloat(config.default_discount) || 0;
+            extraKmCharge = Math.max(0, actualDistance - inclKm) * (parseFloat(config.extra_km_rate) || 0);
+            extraHourCharge = Math.max(0, actualHours - inclHours) * (parseFloat(config.extra_hour_rate) || 0);
+            nightCharge = nightApplies ? (parseFloat(config.night_charge) || 0) : 0;
+            discount = parseFloat(config.default_discount) || 0;
             
-            const subtotal = baseFare + extraKmCharge + extraHourCharge + nightCharge - discount;
-            return Math.max(0, Math.round(subtotal));
+            total = Math.max(0, Math.round(baseFare + extraKmCharge + extraHourCharge + nightCharge - discount));
         }
-
         // 2. If Local / Intercity and flat-rates are mapped in our routesMatrix, use them!
-        if ((rideType === "local" || rideType === "intercity") && flatMetrics) {
-            if (tier === "compact") return flatMetrics.base_fare_compact || Math.round((flatMetrics.base_fare_premium || flatMetrics.base_fare_sedan || 999) * 0.85);
-            if (tier === "premium") return flatMetrics.base_fare_premium || flatMetrics.base_fare_sedan;
-            if (tier === "suv") return flatMetrics.base_fare_suv;
-            if (tier === "muv") return flatMetrics.base_fare_muv || Math.round((flatMetrics.base_fare_suv || 1000) * 1.25);
+        else if ((rideType === "local" || rideType === "intercity") && flatMetrics) {
+            let val = 0;
+            if (tier === "compact") val = flatMetrics.base_fare_compact || Math.round((flatMetrics.base_fare_premium || flatMetrics.base_fare_sedan || 999) * 0.85);
+            else if (tier === "premium") val = flatMetrics.base_fare_premium || flatMetrics.base_fare_sedan || 999;
+            else if (tier === "suv") val = flatMetrics.base_fare_suv || 1000;
+            else if (tier === "muv") val = flatMetrics.base_fare_muv || Math.round((flatMetrics.base_fare_suv || 1000) * 1.25);
+            
+            baseFare = val;
+            total = Math.round(val);
+        }
+        // 3. Fallback or Outstation / Intercity computations (Round-Trip empty return back charging)
+        else if (rideType === "outstation" || rideType === "intercity") {
+            const finalDistance = actualDistance * 2.0;
+            const fixedDays = 1; // Outstation/Intercity duration internally always defaults to 1
+            const minimumBilledDistance = fixedDays * (parseFloat(config.min_km_per_day) || 250);
+            const finalBilledDistance = Math.max(finalDistance, minimumBilledDistance);
+            
+            baseFare = finalBilledDistance * (parseFloat(config.rate_per_km) || 0);
+            driverAllowance = fixedDays * (parseFloat(config.driver_allowance) || 0);
+            nightHalt = Math.max(0, fixedDays - 1) * (parseFloat(config.night_halt) || 0);
+            
+            total = Math.round(baseFare + driverAllowance + nightHalt);
+        }
+        // 4. Local custom estimation fallback
+        else {
+            baseFare = parseFloat(config.base_fare) || 0;
+            extraKmCharge = Math.max(0, actualDistance - localIncludedKm) * (parseFloat(config.extra_km_rate) || 0);
+            nightCharge = nightApplies ? (parseFloat(config.night_charge) || 0) : 0;
+            
+            total = Math.round(baseFare + extraKmCharge + nightCharge);
         }
 
-        // 3. Fallback or Outstation computations
-        if (rideType === "outstation") {
-            const roundTripDistance = actualDistance * 2;
-            const minimumBilledDistance = actualDays * (parseFloat(config.min_km_per_day) || 250);
-            const finalBilledDistance = Math.max(roundTripDistance, minimumBilledDistance);
-            
-            const distanceCost = finalBilledDistance * (parseFloat(config.rate_per_km) || 0);
-            const allowanceCost = actualDays * (parseFloat(config.driver_allowance) || 0);
-            const nightHaltCost = Math.max(0, actualDays - 1) * (parseFloat(config.night_halt) || 0);
-            
-            return Math.round(distanceCost + allowanceCost + nightHaltCost);
-        } else {
-            // Local custom estimation
-            const baseFare = parseFloat(config.base_fare) || 0;
-            const extraKmCharge = Math.max(0, actualDistance - localIncludedKm) * (parseFloat(config.extra_km_rate) || 0);
-            const nightCharge = nightApplies ? (parseFloat(config.night_charge) || 0) : 0;
-            return Math.round(baseFare + extraKmCharge + nightCharge);
-        }
+        const breakdown = {
+            base_fare: Math.round(baseFare),
+            extra_km_charge: Math.round(extraKmCharge),
+            extra_hour_charge: Math.round(extraHourCharge),
+            night_charge: Math.round(nightCharge),
+            driver_allowance: Math.round(driverAllowance),
+            night_halt: Math.round(nightHalt),
+            discount: Math.round(discount),
+            total: Math.round(total)
+        };
+
+        console.log("[UAT-2] Fare Calculation Request -> Ride Type:", rideType, "Distance:", distance, "Days:", days, "Tier:", tier);
+        console.log("[UAT-2] Mapped Tariff Config:", config);
+        console.log("[UAT-2] Computed Breakdown Result:", breakdown);
+
+        return breakdown;
     },
 
     /**

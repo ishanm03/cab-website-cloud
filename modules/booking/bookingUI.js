@@ -46,9 +46,12 @@ const pickupSelect = document.getElementById("pickup-select");
 const dropSelect = document.getElementById("drop-select");
 const pickupDate = document.getElementById("pickup-date");
 const pickupTime = document.getElementById("pickup-time");
+const tripTypeRadios = document.getElementsByName("trip-type");
 const categoryRadios = document.getElementsByName("ride-category");
-const outstationDaysContainer = document.getElementById("outstation-days-container");
-const outstationDaysInput = document.getElementById("outstation-days");
+const catLocalContainer = document.getElementById("cat-local-container");
+const catIntercityContainer = document.getElementById("cat-intercity-container");
+const catOutstationContainer = document.getElementById("cat-outstation-container");
+const catRentalContainer = document.getElementById("cat-rental-container");
 const rentalHoursContainer = document.getElementById("rental-hours-container");
 const rentalHoursSelect = document.getElementById("rental-hours");
 
@@ -143,7 +146,12 @@ function initBookingUI() {
     pickupSelect.addEventListener("change", handlePickupChange);
     dropSelect.addEventListener("change", handleDropChange);
 
-    // 5. Ride Category change to show/hide days selector
+    // 5. Trip Type listener
+    tripTypeRadios.forEach(radio => {
+        radio.addEventListener("change", handleTripTypeChange);
+    });
+
+    // Ride Category change to show/hide days selector
     categoryRadios.forEach(radio => {
         radio.addEventListener("change", handleCategoryChange);
     });
@@ -172,10 +180,48 @@ function initBookingUI() {
     btnApplyPromo.addEventListener("click", handleApplyPromo);
 }
 
+let isLoggingOut = false;
+let idleTimer = null;
+const INACTIVITY_LIMIT = 120000; // 2 minutes
+
+function resetIdleTimer() {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(async () => {
+        console.log("[UAT-7] User idle for 2 minutes on booking page. Auto-logging out.");
+        isLoggingOut = true;
+        try {
+            await authService.logout();
+        } catch (err) {
+            console.error("Sign out error:", err);
+        }
+        window.location.href = "../auth/login.html?logout=true";
+    }, INACTIVITY_LIMIT);
+}
+
+function startInactivityTracker() {
+    const events = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'];
+    events.forEach(evt => {
+        document.addEventListener(evt, resetIdleTimer, true);
+    });
+    resetIdleTimer();
+}
+
+function stopInactivityTracker() {
+    if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+    }
+    const events = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'];
+    events.forEach(evt => {
+        document.removeEventListener(evt, resetIdleTimer, true);
+    });
+}
+
 // Redirect unauthenticated sessions
 async function handleUserSessionChange(user) {
     if (user) {
         currentUser = user;
+        startInactivityTracker();
         try {
             const profile = await dbService.getUserProfile(user.uid);
             if (profile) {
@@ -194,6 +240,7 @@ async function handleUserSessionChange(user) {
     } else {
         currentUser = null;
         currentProfile = null;
+        stopInactivityTracker();
         // User not logged in -> redirect back to login page
         if (!isLoggingOut) {
             window.location.href = "../auth/auth.html?msg=login_required";
@@ -201,13 +248,12 @@ async function handleUserSessionChange(user) {
     }
 }
 
-let isLoggingOut = false;
-
 // Header Log-off handler
 async function handleLogout() {
     const confirmSignout = confirm("Are you sure you want to log out?");
     if (confirmSignout) {
         isLoggingOut = true;
+        stopInactivityTracker();
         await authService.logout();
         window.location.href = "../auth/auth.html?logout=true";
     }
@@ -475,19 +521,39 @@ function getHaversineDistance(coords1, coords2) {
     return Math.ceil(R * c * 1.3); // Apply 30% routing overhead to approximate actual driving distance
 }
 
-// Shows/Hides outstation days and rental hours
+function handleTripTypeChange(e) {
+    const tripType = e.target.value;
+    console.log("[UAT-TripType] Selected Trip Type:", tripType);
+    if (tripType === "one_way") {
+        utils.showElement(catLocalContainer);
+        utils.showElement(catIntercityContainer);
+        utils.showElement(catOutstationContainer);
+        utils.hideElement(catRentalContainer);
+        
+        const localRadio = document.querySelector('input[name="ride-category"][value="local"]');
+        if (localRadio) {
+            localRadio.checked = true;
+            localRadio.dispatchEvent(new Event("change"));
+        }
+    } else {
+        utils.hideElement(catLocalContainer);
+        utils.hideElement(catIntercityContainer);
+        utils.hideElement(catOutstationContainer);
+        utils.showElement(catRentalContainer);
+        
+        const rentalRadio = document.querySelector('input[name="ride-category"][value="rental"]');
+        if (rentalRadio) {
+            rentalRadio.checked = true;
+            rentalRadio.dispatchEvent(new Event("change"));
+        }
+    }
+}
+
+// Shows/Hides rental hours and toggles drop select visibility
 function handleCategoryChange(e) {
     utils.hideElement(bookingAlert);
     const category = e.target.value;
-    
-    if (category === "outstation") {
-        utils.showElement(outstationDaysContainer);
-        outstationDaysInput.required = true;
-    } else {
-        utils.hideElement(outstationDaysContainer);
-        outstationDaysInput.required = false;
-        outstationDaysInput.value = 1;
-    }
+    console.log("[UAT-Category] Category changed to:", category);
 
     if (category === "rental") {
         utils.showElement(rentalHoursContainer);
@@ -584,7 +650,7 @@ async function handleStep1Submit(e) {
     const dateVal = pickupDate.value;
     const timeVal = pickupTime.value;
     const category = document.querySelector('input[name="ride-category"]:checked').value;
-    const days = parseInt(outstationDaysInput.value) || 1;
+    const days = 1;
 
     // Validate 2-hour scheduling constraint
     const now = new Date();
@@ -693,12 +759,14 @@ async function handleStep1Submit(e) {
     }
 
     // Save configuration parameters globally
+    const tripTypeVal = document.querySelector('input[name="trip-type"]:checked').value;
     currentRouteData = {
         pickup: resolvedPickupName,
         drop: resolvedDropName,
         dateString: dateVal,
         timeString: timeVal,
         category: category,
+        tripType: tripTypeVal,
         days: days,
         hours: category === "rental" ? parseInt(rentalHoursSelect.value) : 0,
         km: category === "rental" ? 0 : (metrics ? metrics.km : distanceKm),
@@ -714,6 +782,28 @@ async function handleStep1Submit(e) {
         routeKmBadge.textContent = "Estimated: -- km (Custom Route)";
     } else {
         routeKmBadge.textContent = `Estimated: ${currentRouteData.km} km`;
+    }
+
+    console.log("[UAT-1] Distance Calculation Results -> Category:", category, "Resolved KM:", currentRouteData.km);
+    console.log("[UAT-1] Coordinates -> Pickup:", pickupCoords, "Drop:", dropCoords);
+
+    // Validation for route distance on point-to-point rides
+    if (category !== "rental" && (!currentRouteData.km || currentRouteData.km <= 0)) {
+        console.warn("[UAT-1] Invalid distance detected. Blocking checkout progress.");
+        hideLoader(panelStep1);
+        const waText = `Hi! I was trying to book a cab on the website, but the location system was unable to resolve my route: ${resolvedPickupName} to ${resolvedDropName}. Please help me book manually.`;
+        const waUrl = `https://wa.me/918981538038?text=${encodeURIComponent(waText)}`;
+        utils.showAlert(bookingAlert, `
+            <div class="flex flex-col items-center gap-3 p-2 text-center">
+                <span class="text-sm font-bold text-rose-400">⚠️ Location Resolution Error</span>
+                <p class="text-xs text-slate-300">We are experiencing a connection issue with our routing system and cannot determine the distance automatically for: <br><strong class="text-white">${resolvedPickupName} ➔ ${resolvedDropName}</strong></p>
+                <a href="${waUrl}" target="_blank" class="mt-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-4 py-2.5 rounded-xl transition-all inline-flex items-center gap-2 text-xs shadow-md">
+                    💬 Book Manually on WhatsApp
+                </a>
+            </div>
+        `, "error");
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
     }
 
     // Process rates and time-aware inventory availability check for each category (Compact, Premium, SUV, MUV)
@@ -873,7 +963,8 @@ function navigateToStep3() {
     summaryPickup.textContent = currentRouteData.pickup;
     summaryDrop.textContent = currentRouteData.drop;
     summaryDatetime.textContent = `${currentRouteData.dateString} at ${currentRouteData.timeString}`;
-    summaryCategory.textContent = currentRouteData.category.charAt(0).toUpperCase() + currentRouteData.category.slice(1);
+    const tripTypeLabel = currentRouteData.tripType === "round_trip" ? "Round-Trip" : "One-Way";
+    summaryCategory.textContent = `${currentRouteData.category.toUpperCase()} (${tripTypeLabel})`;
     summaryTier.textContent = selectedVehicleTier.toUpperCase();
     
     // Set base fare & reset promo state
@@ -896,11 +987,7 @@ function navigateToStep3() {
     // Load visible offers for rider selection
     loadVisiblePromoChips();
 
-    if (currentRouteData.category === "outstation") {
-        summaryDaysRow.firstElementChild.textContent = "Outstation Duration";
-        summaryDays.textContent = `${currentRouteData.days} Day(s)`;
-        utils.showElement(summaryDaysRow);
-    } else if (currentRouteData.category === "rental") {
+    if (currentRouteData.category === "rental") {
         summaryDaysRow.firstElementChild.textContent = "Rental Duration";
         summaryDays.textContent = `${currentRouteData.hours} Hour(s)`;
         utils.showElement(summaryDaysRow);
@@ -985,7 +1072,7 @@ async function handleFinalConfirm() {
             drop: currentRouteData.drop,
             date_string: currentRouteData.dateString,
             time_string: currentRouteData.timeString,
-            days: currentRouteData.category === "outstation" ? currentRouteData.days : null,
+            days: (currentRouteData.category === "outstation" || currentRouteData.category === "intercity") ? currentRouteData.days : null,
             hours: currentRouteData.category === "rental" ? currentRouteData.hours : null,
             km: currentRouteData.km,
             vehicle_tier: selectedVehicleTier,
@@ -996,11 +1083,12 @@ async function handleFinalConfirm() {
         const bookingPayload = {
             trip_details: {
                 ride_type: currentRouteData.category,
+                trip_type: currentRouteData.tripType,
                 pickup_location: currentRouteData.pickup,
                 drop_location: currentRouteData.drop,
                 pickup_date: currentRouteData.dateString,
                 pickup_time: currentRouteData.timeString,
-                outstation_days: currentRouteData.category === "outstation" ? currentRouteData.days : null,
+                outstation_days: (currentRouteData.category === "outstation" || currentRouteData.category === "intercity") ? currentRouteData.days : null,
                 rental_hours: currentRouteData.category === "rental" ? currentRouteData.hours : null,
                 pickup_coords: currentRouteData.pickupCoords || null,
                 drop_coords: currentRouteData.dropCoords || null,

@@ -1012,14 +1012,20 @@
                             <p class="text-slate-400 text-xs mt-1">Specify destination routes, date, time, and service categories.</p>
                         </div>
                         <form id="admin-booking-form" class="space-y-6">
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                                <div>
+                                    <label for="admin-booking-triptype" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Trip Type</label>
+                                    <select id="admin-booking-triptype" required class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                        <option value="one_way" selected>One-Way Trip</option>
+                                        <option value="round_trip">Round-Trip</option>
+                                    </select>
+                                </div>
                                 <div>
                                     <label for="admin-booking-category" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Ride Category</label>
                                     <select id="admin-booking-category" required class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
                                         <option value="local" selected>Local (Point to Point)</option>
-                                        <option value="intercity">Intercity</option>
-                                        <option value="outstation">Outstation (Round-Trip)</option>
-                                        <option value="rental">Hourly Rental</option>
+                                        <option value="intercity">Intercity (Within WB)</option>
+                                        <option value="outstation">Outstation (Outside WB)</option>
                                     </select>
                                 </div>
                                 <div>
@@ -1062,20 +1068,22 @@
                             </div>
 
                             <!-- Time-based categories fields (hidden by default) -->
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div id="admin-days-container" class="hidden">
-                                    <label for="admin-booking-days" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Outstation Days</label>
-                                    <input type="number" id="admin-booking-days" min="1" value="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
-                                </div>
+                            <div class="grid grid-cols-1 gap-4">
                                 <div id="admin-hours-container" class="hidden">
                                     <label for="admin-booking-hours" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Rental Duration (Hours)</label>
                                     <select id="admin-booking-hours" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
-                                        <option value="5" selected>5 Hours (Local)</option>
-                                        <option value="6">6 Hours</option>
-                                        <option value="7">7 Hours</option>
-                                        <option value="8">8 Hours</option>
-                                        <option value="9">9 Hours</option>
+                                        <option value="5" selected>5 Hours</option>
                                         <option value="10">10 Hours</option>
+                                        <option value="15">15 Hours</option>
+                                        <option value="20">20 Hours</option>
+                                        <option value="25">25 Hours</option>
+                                        <option value="30">30 Hours</option>
+                                        <option value="35">35 Hours</option>
+                                        <option value="40">40 Hours</option>
+                                        <option value="45">45 Hours</option>
+                                        <option value="50">50 Hours</option>
+                                        <option value="55">55 Hours</option>
+                                        <option value="60">60 Hours</option>
                                     </select>
                                 </div>
                             </div>
@@ -1103,6 +1111,14 @@
                                         <label for="admin-booking-discount" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Discount Override (Optional) (₹)</label>
                                         <input type="number" id="admin-booking-discount" min="0" placeholder="E.g. 100" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
                                     </div>
+                                </div>
+                            </div>
+
+                            <!-- Dynamic Fare Breakdown Panel for Admins -->
+                            <div id="admin-booking-breakdown-panel" class="hidden border border-slate-800 bg-slate-950 p-5 rounded-2xl space-y-3">
+                                <span class="text-[10px] font-black text-amber-500 uppercase tracking-widest block">Estimated Fare Breakdown:</span>
+                                <div id="admin-booking-breakdown-content" class="text-xs text-slate-400 space-y-2">
+                                    <!-- Dynamic breakdown elements injected here -->
                                 </div>
                             </div>
 

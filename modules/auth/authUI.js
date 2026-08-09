@@ -195,7 +195,11 @@ async function handleAuthStateChange(user) {
     console.log("[Auth Debug] handleAuthStateChange triggered. User state:", user);
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get("logout") === "true") {
-        console.log("[Auth Debug] Explicit logout query parameter detected in URL.");
+        console.log("[UAT-5] Explicit logout parameter detected. Cleared URL parameters to prevent login hijack.");
+        // Clear the query parameter from the address bar immediately
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        
         if (user) {
             await authService.logout();
             return;

@@ -132,11 +132,11 @@ def run_tests():
             # Expected:
             # Round trip distance = 150 * 2 = 300 KM
             # Minimum daily distance limit = 250 KM/day * 2 days = 500 KM
-            # Billable KM = max(300, 500) = 500 KM
-            # Base KM fare = 500 * 12.0 (compact rate/km) = 6000.0
-            # Driver daily allowance = 2 * 600.0 (compact allowance/day) = 1200.0
-            # Night halts = 1 night * 500.0 (compact night halt/night) = 500.0
-            # Total = 6000.0 + 1200.0 + 500.0 = 7700.0
+            # Billable KM = max(150.0 * 2.0, 250.0) = 300.0 KM
+            # Base KM fare = 300.0 * 12.0 (compact rate/km) = 3600.0
+            # Driver daily allowance = 1 * 600.0 (compact allowance/day) = 600.0
+            # Night halts = 0 nights = 0.0
+            # Total = 3600.0 + 600.0 = 4200.0
             print("Test 4: Outstation compact round-trip quote...")
             req_outstation = {
                 "category": "outstation",
@@ -144,7 +144,7 @@ def run_tests():
                 "drop": "Digha",
                 "date_string": "2026-08-04",
                 "time_string": "06:30",
-                "days": 2,
+                "days": 1,
                 "km": 150.0,
                 "vehicle_tier": "compact"
             }
@@ -152,9 +152,9 @@ def run_tests():
             response = client.post("/api/v1/quotes/estimate", json=req_outstation, headers=headers)
             assert response.status_code == 200, f"Expected 200, got {response.status_code}"
             data = response.json()
-            assert data["base_fare"] == 7700.0
-            assert data["estimated_fare"] == 7700.0
-            print("✓ Outstation compact multi-day quote calculated successfully!")
+            assert data["base_fare"] == 4200.0, f"Expected 4200.0, got {data['base_fare']}"
+            assert data["estimated_fare"] == 4200.0, f"Expected 4200.0, got {data['estimated_fare']}"
+            print("✓ Outstation compact 1-day quote calculated successfully!")
 
     print("\n✓✓✓ All Phase 4 Rental & Outstation Fare Calculation Tests Passed! ✓✓✓")
 

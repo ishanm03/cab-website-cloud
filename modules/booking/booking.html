@@ -145,34 +145,48 @@
                         </div>
                     </div>
 
-                    <!-- Ride Category Select -->
+                    <!-- Trip Type Select -->
                     <div>
-                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Ride Category</label>
-                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                            <label class="category-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300">
-                                <span class="text-sm font-semibold text-slate-300">Local (Kolkata)</span>
-                                <input type="radio" name="ride-category" value="local" checked class="accent-amber-500 w-4 h-4">
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Trip Type</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <label class="triptype-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300">
+                                <div class="flex flex-col">
+                                    <span class="text-sm font-semibold text-slate-300">One-Way Trip</span>
+                                    <span class="text-[10px] text-slate-500">Local, Intercity & Outstation</span>
+                                </div>
+                                <input type="radio" name="trip-type" value="one_way" checked class="accent-amber-500 w-4 h-4">
                             </label>
-                            <label class="category-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300">
-                                <span class="text-sm font-semibold text-slate-300">Intercity</span>
-                                <input type="radio" name="ride-category" value="intercity" class="accent-amber-500 w-4 h-4">
-                            </label>
-                            <label class="category-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300">
-                                <span class="text-sm font-semibold text-slate-300">Outstation</span>
-                                <input type="radio" name="ride-category" value="outstation" class="accent-amber-500 w-4 h-4">
-                            </label>
-                            <label class="category-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300">
-                                <span class="text-sm font-semibold text-slate-300">Rental</span>
-                                <input type="radio" name="ride-category" value="rental" class="accent-amber-500 w-4 h-4">
+                            <label class="triptype-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300">
+                                <div class="flex flex-col">
+                                    <span class="text-sm font-semibold text-slate-300">Round-Trip</span>
+                                    <span class="text-[10px] text-slate-500">Hourly Rental Packages</span>
+                                </div>
+                                <input type="radio" name="trip-type" value="round_trip" class="accent-amber-500 w-4 h-4">
                             </label>
                         </div>
                     </div>
 
-                    <!-- Dynamic Outstation Days Selector (Initially Hidden) -->
-                    <div id="outstation-days-container" class="hidden">
-                        <label for="outstation-days" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Number of Days (Outstation)</label>
-                        <input type="number" id="outstation-days" min="1" max="30" value="1" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-4 py-4 rounded-2xl outline-none transition-all duration-300 font-medium">
-                        <p class="text-xs text-slate-500 mt-1">Driver night halt allowance is calculated based on days.</p>
+                    <!-- Ride Category Select -->
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Ride Category</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                            <label id="cat-local-container" class="category-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300">
+                                <span class="text-sm font-semibold text-slate-300">Local (Kolkata)</span>
+                                <input type="radio" name="ride-category" value="local" checked class="accent-amber-500 w-4 h-4">
+                            </label>
+                            <label id="cat-intercity-container" class="category-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300">
+                                <span class="text-xs sm:text-sm font-semibold text-slate-300">Intercity (Within WB)</span>
+                                <input type="radio" name="ride-category" value="intercity" class="accent-amber-500 w-4 h-4">
+                            </label>
+                            <label id="cat-outstation-container" class="category-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300">
+                                <span class="text-xs sm:text-sm font-semibold text-slate-300">Outstation (Outside WB)</span>
+                                <input type="radio" name="ride-category" value="outstation" class="accent-amber-500 w-4 h-4">
+                            </label>
+                            <label id="cat-rental-container" class="category-radio flex items-center justify-between p-4 bg-slate-950/60 border border-slate-800 rounded-2xl cursor-pointer hover:border-slate-700 transition-all duration-300 hidden">
+                                <span class="text-sm font-semibold text-slate-300">Rental</span>
+                                <input type="radio" name="ride-category" value="rental" class="accent-amber-500 w-4 h-4">
+                            </label>
+                        </div>
                     </div>
 
                     <!-- Dynamic Rental Hours Selector (Initially Hidden) -->
@@ -180,11 +194,17 @@
                         <label for="rental-hours" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Number of Hours (Rental)</label>
                         <select id="rental-hours" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-4 py-4 rounded-2xl outline-none transition-all duration-300 font-medium appearance-none">
                             <option value="5" selected>5 Hours</option>
-                            <option value="6">6 Hours</option>
-                            <option value="7">7 Hours</option>
-                            <option value="8">8 Hours</option>
-                            <option value="9">9 Hours</option>
                             <option value="10">10 Hours</option>
+                            <option value="15">15 Hours</option>
+                            <option value="20">20 Hours</option>
+                            <option value="25">25 Hours</option>
+                            <option value="30">30 Hours</option>
+                            <option value="35">35 Hours</option>
+                            <option value="40">40 Hours</option>
+                            <option value="45">45 Hours</option>
+                            <option value="50">50 Hours</option>
+                            <option value="55">55 Hours</option>
+                            <option value="60">60 Hours</option>
                         </select>
                         <p class="text-xs text-slate-500 mt-1">Rental duration determines the hourly rate calculation.</p>
                     </div>

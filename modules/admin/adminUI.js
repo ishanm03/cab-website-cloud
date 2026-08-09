@@ -146,6 +146,7 @@ const adminBookingCustomerName = document.getElementById("admin-booking-customer
 const adminBookingCustomerPhone = document.getElementById("admin-booking-customer-phone");
 const adminBookingChannel = document.getElementById("admin-booking-channel");
 const adminBookingForm = document.getElementById("admin-booking-form");
+const adminBookingTripType = document.getElementById("admin-booking-triptype");
 const adminBookingCategory = document.getElementById("admin-booking-category");
 const adminBookingDate = document.getElementById("admin-booking-date");
 const adminBookingTime = document.getElementById("admin-booking-time");
@@ -155,13 +156,13 @@ const adminCustomPickupContainer = document.getElementById("admin-custom-pickup-
 const adminCustomDropContainer = document.getElementById("admin-custom-drop-container");
 const adminBookingCustomPickup = document.getElementById("admin-booking-custom-pickup");
 const adminBookingCustomDrop = document.getElementById("admin-booking-custom-drop");
-const adminDaysContainer = document.getElementById("admin-days-container");
-const adminBookingDays = document.getElementById("admin-booking-days");
 const adminHoursContainer = document.getElementById("admin-hours-container");
 const adminBookingHours = document.getElementById("admin-booking-hours");
 const adminBookingTier = document.getElementById("admin-booking-tier");
 const adminBookingRoster = document.getElementById("admin-booking-roster");
 const adminBookingDiscount = document.getElementById("admin-booking-discount");
+const adminBookingBreakdownPanel = document.getElementById("admin-booking-breakdown-panel");
+const adminBookingBreakdownContent = document.getElementById("admin-booking-breakdown-content");
 const adminBookingMapSearch = document.getElementById("admin-booking-map-search");
 const btnAdminBookingMapSearch = document.getElementById("btn-admin-booking-map-search");
 const adminBookingPickupCoordsBadge = document.getElementById("admin-booking-pickup-coords-badge");
@@ -173,6 +174,7 @@ let adminBookingPickupMarker = null;
 let adminBookingDropMarker = null;
 let adminBookingPickupCoords = null;
 let adminBookingDropCoords = null;
+let currentAdminBreakdown = null;
 
 
 
@@ -340,6 +342,47 @@ function initAdminUI() {
     }
 }
 
+let adminIdleTimer = null;
+const ADMIN_INACTIVITY_LIMIT = 120000; // 2 minutes
+
+function resetAdminIdleTimer() {
+    if (adminIdleTimer) clearTimeout(adminIdleTimer);
+    adminIdleTimer = setTimeout(async () => {
+        console.log("[UAT-7] Admin idle for 2 minutes. Auto-logging out of Dashboard.");
+        localStorage.removeItem("admin_poc_session");
+        try {
+            if (firestoreUnsubscribe) firestoreUnsubscribe();
+            if (firestoreFleetUnsubscribe) firestoreFleetUnsubscribe();
+            if (firestoreDriversUnsubscribe) firestoreDriversUnsubscribe();
+            if (firebaseAuthUnsubscribe) firebaseAuthUnsubscribe();
+            
+            await authService.logout();
+        } catch (err) {
+            console.error("Admin Sign out error:", err);
+        }
+        window.location.href = "../auth/auth.html?logout=true";
+    }, ADMIN_INACTIVITY_LIMIT);
+}
+
+function startAdminInactivityTracker() {
+    const events = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'];
+    events.forEach(evt => {
+        document.addEventListener(evt, resetAdminIdleTimer, true);
+    });
+    resetAdminIdleTimer();
+}
+
+function stopAdminInactivityTracker() {
+    if (adminIdleTimer) {
+        clearTimeout(adminIdleTimer);
+        adminIdleTimer = null;
+    }
+    const events = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'];
+    events.forEach(evt => {
+        document.removeEventListener(evt, resetAdminIdleTimer, true);
+    });
+}
+
 // Security: Force rerouting if user is not authorized as Admin
 async function handleAdminSessionChange(user) {
     const isAdminSession = localStorage.getItem("admin_poc_session") === "true";
@@ -348,6 +391,7 @@ async function handleAdminSessionChange(user) {
     if (loggedInUser && (loggedInUser.email === "admin@sethcabs.com" || loggedInUser.email === "admin@ishancabs.com")) {
         adminWelcome.textContent = `Welcome, Admin`;
         utils.showElement(adminWelcome);
+        startAdminInactivityTracker();
         
         // Start streaming bookings data in real-time
         startBookingsSnapshotListener();
@@ -363,6 +407,7 @@ async function handleAdminSessionChange(user) {
         // Not logged in or not admin -> block access
         console.warn("IshanCabs: Unauthorized admin dashboard access attempt.");
         localStorage.removeItem("admin_poc_session");
+        stopAdminInactivityTracker();
         window.location.href = "../auth/auth.html";
     }
 }
@@ -763,6 +808,8 @@ function buildBookingCardContentHtml(booking, isModal = false) {
     const dropLoc = tripDetails.drop_location || "Not specified";
     const vehicleTier = fareDetails.vehicle_tier || "standard";
     const rideType = tripDetails.ride_type || "local";
+    const rawTripType = tripDetails.trip_type || (rideType === "rental" ? "round_trip" : "one_way");
+    const tripTypeLabel = rawTripType === "round_trip" ? "Round-Trip" : "One-Way";
     const custName = custDetails.name || booking.customer_id || "Rider";
     const custPhone = custDetails.phone || "N/A";
     const bookingIdStr = booking.booking_id || booking.id || "N/A";
@@ -805,7 +852,7 @@ function buildBookingCardContentHtml(booking, isModal = false) {
                 </div>
                 <div>
                     <span class="text-[10px] text-slate-500 block">Tier / Mode</span>
-                    <span class="font-semibold text-slate-300 block mt-0.5 uppercase">${vehicleTier} (${rideType})</span>
+                    <span class="font-semibold text-slate-300 block mt-0.5 uppercase">${vehicleTier} (${rideType}) / ${tripTypeLabel}</span>
                 </div>
                 <div>
                     <span class="text-[10px] text-slate-500 block">KM & Amount</span>
@@ -1399,6 +1446,7 @@ async function handleLogout() {
     const confirmLogout = confirm("Are you sure you want to log out of Admin Dashboard?");
     if (confirmLogout) {
         try {
+            stopAdminInactivityTracker();
             // Unsubscribe listeners
             if (firestoreUnsubscribe) firestoreUnsubscribe();
             if (firestoreFleetUnsubscribe) firestoreFleetUnsubscribe();
@@ -2951,8 +2999,6 @@ async function initAdminBookingForm() {
     adminBookingCustomPickup.required = false;
     utils.hideElement(adminCustomDropContainer);
     adminBookingCustomDrop.required = false;
-    utils.hideElement(adminDaysContainer);
-    adminBookingDays.required = false;
     utils.hideElement(adminHoursContainer);
     adminBookingHours.required = false;
     
@@ -2962,6 +3008,25 @@ async function initAdminBookingForm() {
     }
     
     // 4. Bind event listeners (only once)
+    adminBookingTripType.addEventListener("change", () => {
+        const type = adminBookingTripType.value;
+        console.log("[Admin-TripType] Selected Type:", type);
+        const catSelect = adminBookingCategory;
+        catSelect.innerHTML = "";
+        if (type === "one_way") {
+            catSelect.innerHTML = `
+                <option value="local" selected>Local (Point to Point)</option>
+                <option value="intercity">Intercity (Within WB)</option>
+                <option value="outstation">Outstation (Outside WB)</option>
+            `;
+        } else {
+            catSelect.innerHTML = `
+                <option value="rental" selected>Hourly Rental</option>
+            `;
+        }
+        catSelect.dispatchEvent(new Event("change"));
+    });
+
     adminBookingPickup.addEventListener("change", () => {
         const isCustom = adminBookingPickup.value === "custom";
         if (isCustom) {
@@ -2992,19 +3057,10 @@ async function initAdminBookingForm() {
     
     adminBookingCategory.addEventListener("change", () => {
         const cat = adminBookingCategory.value;
-        if (cat === "outstation") {
-            utils.showElement(adminDaysContainer);
-            adminBookingDays.required = true;
-            utils.hideElement(adminHoursContainer);
-            adminBookingHours.required = false;
-        } else if (cat === "rental") {
-            utils.hideElement(adminDaysContainer);
-            adminBookingDays.required = false;
+        if (cat === "rental") {
             utils.showElement(adminHoursContainer);
             adminBookingHours.required = true;
         } else {
-            utils.hideElement(adminDaysContainer);
-            adminBookingDays.required = false;
             utils.hideElement(adminHoursContainer);
             adminBookingHours.required = false;
         }
@@ -3028,7 +3084,6 @@ async function initAdminBookingForm() {
     
     adminBookingDate.addEventListener("change", updateAdminRouteAndFare);
     adminBookingTime.addEventListener("change", updateAdminRouteAndFare);
-    adminBookingDays.addEventListener("input", updateAdminRouteAndFare);
     adminBookingHours.addEventListener("change", updateAdminRouteAndFare);
     adminBookingTier.addEventListener("change", updateAdminRouteAndFare);
     adminBookingDiscount.addEventListener("input", updateAdminRouteAndFare);
@@ -3334,7 +3389,7 @@ async function updateAdminRouteAndFare() {
     const category = adminBookingCategory.value;
     const pickup = adminBookingPickup.value;
     const drop = adminBookingDrop.value;
-    const days = parseInt(adminBookingDays.value) || 1;
+    const days = 1;
     const hours = category === "rental" ? parseInt(adminBookingHours.value) : 0;
     const tier = adminBookingTier.value;
     const discountVal = parseFloat(adminBookingDiscount.value) || 0;
@@ -3485,11 +3540,12 @@ async function updateAdminRouteAndFare() {
     }
     
     let computedBaseFare = 0;
+    let breakdown = null;
     try {
         const ratesResponse = await bookingService.fetchRates();
         const activeRates = ratesResponse.rates;
         
-        computedBaseFare = bookingService.calculateFare(
+        breakdown = bookingService.calculateFareBreakdown(
             category,
             distanceKm,
             days,
@@ -3498,6 +3554,7 @@ async function updateAdminRouteAndFare() {
             hours,
             activeRates
         );
+        computedBaseFare = breakdown.total;
     } catch (e) {
         console.error("Error computing booking fare:", e);
         computedBaseFare = 0;
@@ -3508,6 +3565,24 @@ async function updateAdminRouteAndFare() {
     currentAdminPolyline = polyline;
     currentAdminFlatMetrics = metrics;
     currentAdminEstimatedFare = Math.max(0, computedBaseFare - discountVal);
+    currentAdminBreakdown = breakdown;
+
+    // Render detailed fare breakdown for Admin UAT visibility
+    if (breakdown && (pickup && (category === "rental" || drop))) {
+        utils.showElement(adminBookingBreakdownPanel);
+        const parts = [];
+        parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Base Fare Limit:</span><span class="text-white font-bold">₹${breakdown.base_fare}</span></div>`);
+        if (breakdown.extra_km_charge > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Extra Distance Cost:</span><span class="text-white font-bold">₹${breakdown.extra_km_charge}</span></div>`);
+        if (breakdown.extra_hour_charge > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Extra Hour Cost:</span><span class="text-white font-bold">₹${breakdown.extra_hour_charge}</span></div>`);
+        if (breakdown.night_charge > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Night Surcharge:</span><span class="text-white font-bold">₹${breakdown.night_charge}</span></div>`);
+        if (breakdown.driver_allowance > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Driver Allowance:</span><span class="text-white font-bold">₹${breakdown.driver_allowance}</span></div>`);
+        if (breakdown.night_halt > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Driver Night Halt:</span><span class="text-white font-bold">₹${breakdown.night_halt}</span></div>`);
+        if (discountVal > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900 text-rose-400"><span>Discount Override:</span><span class="font-bold">-₹${discountVal}</span></div>`);
+        parts.push(`<div class="flex justify-between pt-2 mt-1.5 font-bold text-amber-500 text-sm"><span>Total Est. Price:</span><span>₹${currentAdminEstimatedFare}</span></div>`);
+        adminBookingBreakdownContent.innerHTML = parts.join("");
+    } else {
+        utils.hideElement(adminBookingBreakdownPanel);
+    }
     
     const submitBtn = adminBookingForm.querySelector('button[type="submit"]');
     if (submitBtn) {
@@ -3527,6 +3602,7 @@ async function handleAdminBookingFormSubmit(e) {
     const customerName = adminBookingCustomerName.value.trim();
     const customerPhone = adminBookingCustomerPhone.value.trim();
     const channel = adminBookingChannel.value;
+    const tripType = adminBookingTripType.value;
     const category = adminBookingCategory.value;
     const dateVal = adminBookingDate.value;
     const timeVal = adminBookingTime.value;
@@ -3534,7 +3610,7 @@ async function handleAdminBookingFormSubmit(e) {
     const dropVal = adminBookingDrop.value;
     const customPickupVal = adminBookingCustomPickup.value.trim();
     const customDropVal = adminBookingCustomDrop.value.trim();
-    const days = category === "outstation" ? (parseInt(adminBookingDays.value) || 1) : null;
+    const days = (category === "outstation" || category === "intercity") ? 1 : null;
     const hours = category === "rental" ? (parseInt(adminBookingHours.value) || 5) : null;
     const tier = adminBookingTier.value;
     const discountOverride = parseFloat(adminBookingDiscount.value) || 0;
@@ -3636,6 +3712,7 @@ async function handleAdminBookingFormSubmit(e) {
         },
         trip_details: {
             ride_type: category,
+            trip_type: tripType,
             pickup_location: pickupLocName,
             drop_location: dropLocName,
             pickup_date: dateVal,
@@ -3651,7 +3728,8 @@ async function handleAdminBookingFormSubmit(e) {
             base_fare: currentAdminBaseFare,
             discount_amount: discountOverride,
             estimated_fare: currentAdminEstimatedFare,
-            estimated_km: currentAdminDistanceKm
+            estimated_km: currentAdminDistanceKm,
+            breakdown: currentAdminBreakdown
         },
         status: status,
         payment_status: "pending",
@@ -3692,8 +3770,6 @@ async function handleAdminBookingFormSubmit(e) {
         adminBookingCustomPickup.required = false;
         utils.hideElement(adminCustomDropContainer);
         adminBookingCustomDrop.required = false;
-        utils.hideElement(adminDaysContainer);
-        adminBookingDays.required = false;
         utils.hideElement(adminHoursContainer);
         adminBookingHours.required = false;
         

@@ -20,6 +20,43 @@ function initAuthObserver() {
     if (!authNavBtn || !auth || !authService) return;
 
     let isUserLoggedIn = false;
+    let idleTimer = null;
+    const INACTIVITY_LIMIT = 120000; // 2 minutes
+
+    function resetIdleTimer() {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(async () => {
+            console.log("[UAT-7] User idle for 2 minutes on home page. Auto-logging out.");
+            localStorage.removeItem("admin_poc_session");
+            try {
+                if (auth.currentUser) {
+                    await auth.signOut();
+                }
+            } catch (err) {
+                console.error("Sign out error:", err);
+            }
+            window.location.href = "./modules/auth/login.html?logout=true";
+        }, INACTIVITY_LIMIT);
+    }
+
+    function startInactivityTracker() {
+        const events = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'];
+        events.forEach(evt => {
+            document.addEventListener(evt, resetIdleTimer, true);
+        });
+        resetIdleTimer();
+    }
+
+    function stopInactivityTracker() {
+        if (idleTimer) {
+            clearTimeout(idleTimer);
+            idleTimer = null;
+        }
+        const events = ['mousemove', 'mousedown', 'keypress', 'touchstart', 'scroll'];
+        events.forEach(evt => {
+            document.removeEventListener(evt, resetIdleTimer, true);
+        });
+    }
 
     // Listen to Firebase Auth state updates
     onAuthStateChanged(auth, (user) => {
@@ -28,6 +65,7 @@ function initAuthObserver() {
 
         if (loggedInUser) {
             isUserLoggedIn = true;
+            startInactivityTracker();
             const email = loggedInUser.email || "";
 
             if (email === "admin@sethcabs.com" || email === "admin@ishancabs.com") {
@@ -96,6 +134,7 @@ function initAuthObserver() {
             if (btnRiderActivity) {
                 btnRiderActivity.classList.add("hidden");
             }
+            stopInactivityTracker();
         }
     });
 

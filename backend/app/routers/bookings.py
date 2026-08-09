@@ -117,8 +117,8 @@ def calculate_fare_breakdown(
             "total": float(val)
         }
 
-    # 3. Intercity Outstation (Round-Trip pricing)
-    if ride_type == "outstation":
+    # 3. Intercity Outstation (Round-Trip pricing for empty return back mileage)
+    if ride_type == "outstation" or ride_type == "intercity":
         category_rates = rates_db.get("intercity")
         if not category_rates or tier not in category_rates:
             raise HTTPException(
@@ -127,15 +127,17 @@ def calculate_fare_breakdown(
             )
         config = category_rates[tier]
         
+        fixed_days = 1 # Outstation/Intercity duration internally always defaults to 1
         round_trip_dist = actual_distance * 2.0
-        min_billed_km = float(config.get("min_km_per_day", 0.0)) * actual_days
+        min_billed_km = float(config.get("min_km_per_day", 0.0)) * fixed_days
         billable_km = max(round_trip_dist, min_billed_km)
         
         base_fare = billable_km * float(config.get("rate_per_km", 0.0))
-        driver_allowance = float(config.get("driver_allowance", 0.0)) * actual_days
-        night_halt = float(config.get("night_halt", 0.0)) * max(0, actual_days - 1)
+        driver_allowance = float(config.get("driver_allowance", 0.0)) * fixed_days
+        night_halt = float(config.get("night_halt", 0.0)) * max(0, fixed_days - 1)
         
         total = base_fare + driver_allowance + night_halt
+        print(f"[UAT-2] Backend Fare Calculation -> ride_type: {ride_type}, actual_distance: {actual_distance}, fixed_days: {fixed_days}, billable_km: {billable_km}, total: {total}")
         return {
             "base_fare": base_fare,
             "extra_km_charge": 0.0,
