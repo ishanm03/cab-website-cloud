@@ -121,6 +121,10 @@ let mapPickupCoords = null; // [lat, lng]
 let mapDropCoords = null;   // [lat, lng]
 let mapPickupAddress = "";
 let mapDropAddress = "";
+let customPickupCoords = null;
+let customDropCoords = null;
+let customPickupTimer = null;
+let customDropTimer = null;
 
 let dbLocations = []; // Loaded dynamically from Firestore
 
@@ -178,6 +182,9 @@ function initBookingUI() {
 
     // 12. Apply Promo Code
     btnApplyPromo.addEventListener("click", handleApplyPromo);
+
+    // 13. Dynamic Geocoding setup for Custom Location inputs
+    setupCustomAddressGeocoding();
 }
 
 let isLoggingOut = false;
@@ -300,6 +307,10 @@ function handlePickupChange() {
     utils.hideElement(bookingAlert);
     const pickupVal = pickupSelect.value;
     
+    if (pickupVal !== "Custom Location") {
+        customPickupCoords = null;
+    }
+
     // Clear and enable drop dropdown
     dropSelect.innerHTML = `<option value="" disabled selected>Select Destination</option>`;
     dropSelect.disabled = false;
@@ -330,6 +341,9 @@ function handlePickupChange() {
 
 function handleDropChange() {
     utils.hideElement(bookingAlert);
+    if (dropSelect.value !== "Custom Location") {
+        customDropCoords = null;
+    }
     toggleCustomAddressFields();
     toggleMapVisibility();
 }
@@ -363,13 +377,10 @@ function toggleMapVisibility() {
     const dropVal = dropSelect.value;
     const category = document.querySelector('input[name="ride-category"]:checked')?.value || "local";
 
-    const isPickupPredefined = pickupVal && pickupVal !== "Custom Location";
-    const isDropPredefined = dropVal && dropVal !== "Custom Location";
+    const hasPickup = !!pickupVal;
+    const hasDrop = (category === "rental" || !!dropVal);
 
-    if (category === "rental" && isPickupPredefined) {
-        utils.showElement(bookingMapWrapper);
-        initOrUpdateMap();
-    } else if (category !== "rental" && isPickupPredefined && isDropPredefined) {
+    if (hasPickup && hasDrop) {
         utils.showElement(bookingMapWrapper);
         initOrUpdateMap();
     } else {
@@ -381,14 +392,14 @@ function initOrUpdateMap() {
     const kolkataCenter = [22.5726, 88.3639];
 
     if (!mapInstance) {
-        // Initialize Leaflet map as read-only preview
+        // Initialize Leaflet map as interactive preview
         mapInstance = L.map('booking-map', {
-            dragging: false,
-            touchZoom: false,
-            scrollWheelZoom: false,
-            doubleClickZoom: false,
-            boxZoom: false,
-            keyboard: false,
+            dragging: true,
+            touchZoom: true,
+            scrollWheelZoom: true,
+            doubleClickZoom: true,
+            boxZoom: true,
+            keyboard: true,
             zoomControl: true
         }).setView(kolkataCenter, 12);
         
@@ -403,14 +414,24 @@ function initOrUpdateMap() {
     const dropVal = dropSelect.value;
     const category = document.querySelector('input[name="ride-category"]:checked')?.value || "local";
 
-    // Find predefined coordinates in dbLocations
-    const pickupLoc = dbLocations.find(l => l.name === pickupVal);
-    mapPickupCoords = pickupLoc ? [pickupLoc.lat, pickupLoc.lng] : null;
-    mapPickupAddress = pickupVal || "";
+    // Resolve coordinates (predefined vs custom)
+    if (pickupVal === "Custom Location") {
+        mapPickupCoords = customPickupCoords;
+        mapPickupAddress = customPickupAddress.value.trim() || "Custom Location";
+    } else {
+        const pickupLoc = dbLocations.find(l => l.name === pickupVal);
+        mapPickupCoords = pickupLoc ? [pickupLoc.lat, pickupLoc.lng] : null;
+        mapPickupAddress = pickupVal || "";
+    }
 
-    const dropLoc = dbLocations.find(l => l.name === dropVal);
-    mapDropCoords = (category !== "rental" && dropLoc) ? [dropLoc.lat, dropLoc.lng] : null;
-    mapDropAddress = dropVal || "";
+    if (dropVal === "Custom Location") {
+        mapDropCoords = (category !== "rental") ? customDropCoords : null;
+        mapDropAddress = customDropAddress.value.trim() || "Custom Location";
+    } else {
+        const dropLoc = dbLocations.find(l => l.name === dropVal);
+        mapDropCoords = (category !== "rental" && dropLoc) ? [dropLoc.lat, dropLoc.lng] : null;
+        mapDropAddress = dropVal || "";
+    }
 
     // Draw/update Pickup Marker
     if (mapPickupCoords) {
@@ -490,6 +511,61 @@ function initOrUpdateMap() {
 function updateMarkerPopup(marker, text) {
     if (!marker) return;
     marker.bindPopup(text).openPopup();
+}
+
+async function geocodeAddress(address) {
+    if (!address) return null;
+    try {
+        const query = encodeURIComponent(address + ", Kolkata, West Bengal, India");
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
+            headers: { 'Accept-Language': 'en' }
+        });
+        if (response.ok) {
+            const results = await response.json();
+            if (results && results.length > 0) {
+                return [parseFloat(results[0].lat), parseFloat(results[0].lon)];
+            }
+        }
+    } catch (e) {
+        console.error("Geocoding failed for address:", address, e);
+    }
+    return null;
+}
+
+function setupCustomAddressGeocoding() {
+    if (!customPickupAddress || !customDropAddress) return;
+
+    customPickupAddress.addEventListener("input", () => {
+        clearTimeout(customPickupTimer);
+        customPickupTimer = setTimeout(async () => {
+            const address = customPickupAddress.value.trim();
+            if (address.length > 3) {
+                console.log("[Geocoding] Searching custom pickup:", address);
+                const coords = await geocodeAddress(address);
+                if (coords) {
+                    customPickupCoords = coords;
+                    console.log("[Geocoding] Custom pickup resolved to:", customPickupCoords);
+                    initOrUpdateMap();
+                }
+            }
+        }, 800);
+    });
+
+    customDropAddress.addEventListener("input", () => {
+        clearTimeout(customDropTimer);
+        customDropTimer = setTimeout(async () => {
+            const address = customDropAddress.value.trim();
+            if (address.length > 3) {
+                console.log("[Geocoding] Searching custom drop:", address);
+                const coords = await geocodeAddress(address);
+                if (coords) {
+                    customDropCoords = coords;
+                    console.log("[Geocoding] Custom drop resolved to:", customDropCoords);
+                    initOrUpdateMap();
+                }
+            }
+        }, 800);
+    });
 }
 
 async function fetchOSRMRoute(pickupCoords, dropCoords) {
@@ -679,6 +755,10 @@ async function handleStep1Submit(e) {
             return;
         }
         resolvedPickupName = customText;
+        pickupCoords = customPickupCoords || await geocodeAddress(customText);
+        if (pickupCoords) {
+            customPickupCoords = pickupCoords;
+        }
     } else {
         const pickupLoc = dbLocations.find(l => l.name === pickup);
         if (pickupLoc) {
@@ -697,6 +777,10 @@ async function handleStep1Submit(e) {
                 return;
             }
             resolvedDropName = customText;
+            dropCoords = customDropCoords || await geocodeAddress(customText);
+            if (dropCoords) {
+                customDropCoords = dropCoords;
+            }
         } else {
             const dropLoc = dbLocations.find(l => l.name === drop);
             if (dropLoc) {
@@ -710,7 +794,7 @@ async function handleStep1Submit(e) {
     let distanceKm = 0;
     let polyline = null;
 
-    if (category === "rental" || isCustomBooking) {
+    if (category === "rental") {
         distanceKm = 0;
         polyline = null;
     } else {
