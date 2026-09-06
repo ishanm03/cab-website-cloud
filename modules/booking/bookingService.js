@@ -163,7 +163,20 @@ const bookingService = {
             night_halt: Math.round(nightHalt),
             discount: Math.round(discount),
             total: Math.round(total),
-            description: logicDesc
+            description: logicDesc,
+            params: {
+                ride_type: rideType,
+                tier: tier,
+                actual_distance: actualDistance,
+                actual_hours: actualHours,
+                days: (rideType === "outstation" || rideType === "intercity") ? 1 : days,
+                night_applies: nightApplies,
+                time_string: timeString,
+                config: config,
+                global_config: globalCfg,
+                flat_metrics: flatMetrics,
+                local_included_km: localIncludedKm
+            }
         };
 
         console.log("[UAT-2] Fare Calculation Request -> Ride Type:", rideType, "Distance:", distance, "Days:", days, "Tier:", tier);

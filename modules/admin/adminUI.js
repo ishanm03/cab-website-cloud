@@ -3556,7 +3556,6 @@ async function updateAdminRouteAndFare() {
                 polyline = null;
             }
         }
-    }
     
     let computedBaseFare = 0;
     let breakdown = null;
@@ -3571,7 +3570,8 @@ async function updateAdminRouteAndFare() {
             tier,
             metrics,
             hours,
-            activeRates
+            activeRates,
+            timeVal
         );
         computedBaseFare = breakdown.total;
     } catch (e) {
@@ -3589,21 +3589,20 @@ async function updateAdminRouteAndFare() {
     // Render detailed fare breakdown for Admin UAT visibility
     if (breakdown && (pickup && (category === "rental" || drop))) {
         utils.showElement(adminBookingBreakdownPanel);
-        const parts = [];
-        parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Base Fare Limit:</span><span class="text-white font-bold">₹${breakdown.base_fare}</span></div>`);
-        if (breakdown.extra_km_charge > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Extra Distance Cost:</span><span class="text-white font-bold">₹${breakdown.extra_km_charge}</span></div>`);
-        if (breakdown.extra_hour_charge > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Extra Hour Cost:</span><span class="text-white font-bold">₹${breakdown.extra_hour_charge}</span></div>`);
-        if (breakdown.night_charge > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Night Surcharge:</span><span class="text-white font-bold">₹${breakdown.night_charge}</span></div>`);
-        if (breakdown.driver_allowance > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Driver Allowance:</span><span class="text-white font-bold">₹${breakdown.driver_allowance}</span></div>`);
-        if (breakdown.night_halt > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900"><span>Driver Night Halt:</span><span class="text-white font-bold">₹${breakdown.night_halt}</span></div>`);
-        if (discountVal > 0) parts.push(`<div class="flex justify-between py-1 border-b border-slate-900 text-rose-400"><span>Discount Override:</span><span class="font-bold">-₹${discountVal}</span></div>`);
-        parts.push(`<div class="flex justify-between pt-2 mt-1.5 font-bold text-amber-500 text-sm"><span>Total Est. Price:</span><span>₹${currentAdminEstimatedFare}</span></div>`);
-        adminBookingBreakdownContent.innerHTML = parts.join("");
+        adminBookingBreakdownContent.innerHTML = renderAdminDetailedFareBreakdownHtml(
+            breakdown,
+            discountVal,
+            category,
+            tripTypeVal,
+            tier,
+            distanceKm,
+            timeVal
+        );
     } else {
         utils.hideElement(adminBookingBreakdownPanel);
     }
     
-    const submitBtn = adminBookingForm.querySelector('button[type="submit"]');
+    const submitBtn = adminBookingForm ? adminBookingForm.querySelector('button[type="submit"]') : null;
     if (submitBtn) {
         let text = `Log Booking Request (Est: ₹${currentAdminEstimatedFare})`;
         if (category !== "rental" && (!pickup || !drop)) {
