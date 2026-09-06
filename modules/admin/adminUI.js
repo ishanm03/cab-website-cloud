@@ -781,55 +781,75 @@ function buildBookingCardContentHtml(booking, isModal = false) {
     const promo = fareDetails.promo_code;
     const kmVal = fareDetails.estimated_km || 0;
 
-    const breakdown = fareDetails.breakdown;
-    let amountHtml = `${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-`;
-    let fareBreakdownHtml = "";
-
-    if (breakdown) {
-        if (breakdown.description) {
-            fareBreakdownHtml = `
-                <!-- Detailed Price Breakdown -->
-                <div class="bg-slate-950/40 border border-slate-900 px-3 py-2 rounded-xl text-[10px] text-slate-400 font-normal leading-normal whitespace-normal mt-3">
-                    <span class="text-[9px] font-bold text-amber-500/80 tracking-wider block uppercase mb-1">Fare Logic Breakdown</span>
-                    ${breakdown.description}
-                </div>
-            `;
-        } else {
-            const parts = [];
-            if (typeof breakdown.base_fare === "number" && breakdown.base_fare > 0) parts.push(`Base: ₹${breakdown.base_fare}`);
-            if (typeof breakdown.extra_km_charge === "number" && breakdown.extra_km_charge > 0) parts.push(`Extra KM: ₹${breakdown.extra_km_charge}`);
-            if (typeof breakdown.extra_hour_charge === "number" && breakdown.extra_hour_charge > 0) parts.push(`Extra Hrs: ₹${breakdown.extra_hour_charge}`);
-            if (typeof breakdown.night_charge === "number" && breakdown.night_charge > 0) parts.push(`Night fee: ₹${breakdown.night_charge}`);
-            if (typeof breakdown.driver_allowance === "number" && breakdown.driver_allowance > 0) parts.push(`Driver: ₹${breakdown.driver_allowance}`);
-            if (typeof breakdown.night_halt === "number" && breakdown.night_halt > 0) parts.push(`Halt: ₹${breakdown.night_halt}`);
-            if (typeof breakdown.discount === "number" && breakdown.discount > 0) parts.push(`Promo: -₹${breakdown.discount}`);
-            if (parts.length > 0) {
-                fareBreakdownHtml = `
-                    <div class="bg-slate-950/40 border border-slate-900 px-3 py-2 rounded-xl text-[10px] text-slate-400 font-normal leading-normal whitespace-normal mt-3">
-                        <span class="text-[9px] font-bold text-amber-500/80 tracking-wider block uppercase mb-1">Fare Logic Breakdown</span>
-                        ${parts.join(" | ")}
-                    </div>
-                `;
-            }
-        }
-    } else if (discount > 0) {
-        fareBreakdownHtml = `
-            <div class="bg-slate-950/40 border border-slate-900 px-3 py-2 rounded-xl text-[10px] text-slate-400 font-normal leading-normal whitespace-normal mt-3">
-                <span class="text-[9px] font-bold text-amber-500/80 tracking-wider block uppercase mb-1">Fare Logic Breakdown</span>
-                Base: ₹${baseFare.toLocaleString("en-IN")} | Promo: ${promo} (-₹${discount.toLocaleString("en-IN")})
-            </div>
-        `;
-    }
-
     const pickupLoc = tripDetails.pickup_location || "Not specified";
     const dropLoc = tripDetails.drop_location || "Not specified";
-    const vehicleTier = fareDetails.vehicle_tier || "standard";
+    const vehicleTier = fareDetails.vehicle_tier || "compact";
     const rideType = tripDetails.ride_type || "local";
     const rawTripType = tripDetails.trip_type || (rideType === "rental" ? "round_trip" : "one_way");
     const tripTypeLabel = rawTripType === "round_trip" ? "Round-Trip" : "One-Way";
     const custName = custDetails.name || booking.customer_id || "Rider";
     const custPhone = custDetails.phone || "N/A";
     const bookingIdStr = booking.booking_id || booking.id || "N/A";
+    const bookingIdSafe = (booking.booking_id || booking.id || Math.random().toString(36).substring(7)).replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    let amountHtml = `${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-`;
+
+    // Construct breakdown object if not directly saved
+    let breakdownToUse = breakdown;
+    if (!breakdownToUse) {
+        breakdownToUse = {
+            base_fare: baseFare,
+            extra_km_charge: 0,
+            extra_hour_charge: 0,
+            night_charge: 0,
+            driver_allowance: 0,
+            night_halt: 0,
+            discount: discount,
+            total: finalFare,
+            description: `Trip Fare Calculation (${kmVal} km)`,
+            params: {
+                ride_type: rideType,
+                tier: vehicleTier,
+                actual_distance: kmVal,
+                actual_hours: tripDetails.rental_hours || 0,
+                days: (rideType === "outstation" || rideType === "intercity") ? 1 : 1,
+                time_string: timeStr,
+                promo_code: promo
+            }
+        };
+    } else if (promo && breakdownToUse.params && !breakdownToUse.params.promo_code) {
+        breakdownToUse.params.promo_code = promo;
+    }
+
+    const detailedBreakdownInnerHtml = renderAdminDetailedFareBreakdownHtml(
+        breakdownToUse,
+        discount,
+        rideType,
+        rawTripType,
+        vehicleTier,
+        kmVal,
+        timeStr
+    );
+
+    const fareBreakdownHtml = `
+        <!-- Collapsible Detailed Fare Breakdown Card -->
+        <div class="mt-3 pt-3 border-t border-slate-800/80">
+            <button type="button" 
+                    onclick="const el = document.getElementById('fb-content-${bookingIdSafe}'); const ch = document.getElementById('fb-chevron-${bookingIdSafe}'); if(el){ el.classList.toggle('hidden'); if(ch){ ch.classList.toggle('rotate-180'); } }" 
+                    class="w-full flex items-center justify-between text-xs font-bold text-amber-400 hover:text-amber-300 py-2 px-3 rounded-xl bg-slate-950/60 hover:bg-slate-900 border border-slate-800 focus:outline-none transition-all">
+                <span class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+                    </svg>
+                    <span>Detailed Fare Calculation Breakdown</span>
+                </span>
+                <span id="fb-chevron-${bookingIdSafe}" class="text-xs transition-transform transform rotate-0 text-slate-400">▼</span>
+            </button>
+            <div id="fb-content-${bookingIdSafe}" class="mt-3 hidden space-y-3">
+                ${detailedBreakdownInnerHtml}
+            </div>
+        </div>
+    `;
 
     return `
         <div class="space-y-4">
@@ -3626,10 +3646,10 @@ function renderAdminDetailedFareBreakdownHtml(breakdown, discountVal, category, 
                     `).join('')}
 
                     ${discountVal > 0 ? `
-                        <div class="flex justify-between items-center p-2.5 bg-rose-950/20 text-rose-400">
+                        <div class="flex justify-between items-center p-2.5 ${p.promo_code ? 'bg-emerald-950/30 text-emerald-400' : 'bg-rose-950/20 text-rose-400'}">
                             <div>
-                                <span class="text-xs font-medium block">Admin Discount Override</span>
-                                <span class="text-[10px] text-rose-300/70 block leading-tight mt-0.5">Custom discount deducted from subtotal</span>
+                                <span class="text-xs font-medium block">${p.promo_code ? `Promo Code Discount (${p.promo_code})` : 'Admin Discount Override'}</span>
+                                <span class="text-[10px] ${p.promo_code ? 'text-emerald-300/70' : 'text-rose-300/70'} block leading-tight mt-0.5">${p.promo_code ? 'Applied promo code savings' : 'Custom discount deducted from subtotal'}</span>
                             </div>
                             <span class="text-xs font-bold whitespace-nowrap">-₹${discountVal.toLocaleString("en-IN")}</span>
                         </div>
