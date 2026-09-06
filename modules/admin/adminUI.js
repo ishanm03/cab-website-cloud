@@ -795,7 +795,7 @@ function buildBookingCardContentHtml(booking, isModal = false) {
     let amountHtml = `${kmVal} km • ₹${finalFare.toLocaleString("en-IN")}/-`;
 
     // Construct breakdown object if not directly saved
-    let breakdownToUse = breakdown;
+    let breakdownToUse = fareDetails.breakdown;
     if (!breakdownToUse) {
         breakdownToUse = {
             base_fare: baseFare,
