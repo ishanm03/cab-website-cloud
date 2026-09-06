@@ -5,6 +5,7 @@ import { authService } from "../auth/authService.js";
 import { utils } from "../shared/utils.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
 import { terminalCoordinates, routesMatrix } from "../shared/routesMatrix.js";
+import { classifyDestination } from "../shared/locationClassifier.js";
 import { bookingService } from "../booking/bookingService.js";
 import { 
     collection, 
@@ -3046,24 +3047,51 @@ async function initAdminBookingForm() {
         return;
     }
     
-    // 4. Bind event listeners (only once)
-    adminBookingTripType.addEventListener("change", () => {
+    function syncAdminCategoryWithDestination() {
         const type = adminBookingTripType.value;
-        console.log("[Admin-TripType] Selected Type:", type);
         const catSelect = adminBookingCategory;
-        catSelect.innerHTML = "";
-        if (type === "one_way") {
+        if (type === "round_trip") {
+            catSelect.innerHTML = `<option value="rental" selected>Hourly Rental</option>`;
+            return;
+        }
+
+        const dropVal = adminBookingDrop.value;
+        if (!dropVal) {
             catSelect.innerHTML = `
                 <option value="local" selected>Local (Point to Point)</option>
                 <option value="intercity">Intercity (Within WB)</option>
                 <option value="outstation">Outstation (Outside WB)</option>
             `;
-        } else {
-            catSelect.innerHTML = `
-                <option value="rental" selected>Hourly Rental</option>
-            `;
+            return;
         }
-        catSelect.dispatchEvent(new Event("change"));
+
+        let dropCoords = null;
+        let customText = "";
+        if (dropVal === "custom") {
+            dropCoords = adminBookingDropCoords;
+            customText = adminBookingCustomDrop ? adminBookingCustomDrop.value.trim() : "";
+        } else {
+            const found = adminPredefinedLocations.find(l => l.name === dropVal);
+            if (found) dropCoords = [found.lat, found.lng];
+        }
+
+        const determinedCategory = classifyDestination(dropVal === "custom" ? "Custom Location" : dropVal, dropCoords, customText);
+
+        if (determinedCategory === "outstation") {
+            catSelect.innerHTML = `<option value="outstation" selected>Outstation (Outside WB)</option>`;
+        } else if (determinedCategory === "intercity") {
+            catSelect.innerHTML = `<option value="intercity" selected>Intercity (Within WB)</option>`;
+        } else {
+            catSelect.innerHTML = `<option value="local" selected>Local (Point to Point)</option>`;
+        }
+    }
+
+    // 4. Bind event listeners (only once)
+    adminBookingTripType.addEventListener("change", () => {
+        const type = adminBookingTripType.value;
+        console.log("[Admin-TripType] Selected Type:", type);
+        syncAdminCategoryWithDestination();
+        adminBookingCategory.dispatchEvent(new Event("change"));
     });
 
     adminBookingPickup.addEventListener("change", () => {
@@ -3077,6 +3105,8 @@ async function initAdminBookingForm() {
             adminBookingCustomPickup.value = "";
         }
         updateAdminBookingDropOptions();
+        syncAdminCategoryWithDestination();
+        adminBookingCategory.dispatchEvent(new Event("change"));
         updateAdminRouteAndFare();
     });
     
@@ -3091,6 +3121,8 @@ async function initAdminBookingForm() {
             adminBookingCustomDrop.required = false;
             adminBookingCustomDrop.value = "";
         }
+        syncAdminCategoryWithDestination();
+        adminBookingCategory.dispatchEvent(new Event("change"));
         updateAdminRouteAndFare();
     });
     
@@ -3121,6 +3153,16 @@ async function initAdminBookingForm() {
         updateAdminRouteAndFare();
     });
     
+    let customDropDebounce = null;
+    adminBookingCustomDrop.addEventListener("input", () => {
+        clearTimeout(customDropDebounce);
+        customDropDebounce = setTimeout(() => {
+            syncAdminCategoryWithDestination();
+            adminBookingCategory.dispatchEvent(new Event("change"));
+            updateAdminRouteAndFare();
+        }, 500);
+    });
+
     adminBookingDate.addEventListener("change", updateAdminRouteAndFare);
     adminBookingTime.addEventListener("change", updateAdminRouteAndFare);
     adminBookingHours.addEventListener("change", updateAdminRouteAndFare);
@@ -3339,10 +3381,14 @@ async function handleAdminBookingMapSearch() {
                     adminBookingDropMarker.on('dragend', () => {
                         const pos = adminBookingDropMarker.getLatLng();
                         adminBookingDropCoords = [pos.lat, pos.lng];
+                        syncAdminCategoryWithDestination();
+                        adminBookingCategory.dispatchEvent(new Event("change"));
                         updateAdminCoordsBadges();
                         updateAdminRouteAndFare();
                     });
                 }
+                syncAdminCategoryWithDestination();
+                adminBookingCategory.dispatchEvent(new Event("change"));
             }
             updateAdminCoordsBadges();
             updateAdminRouteAndFare();

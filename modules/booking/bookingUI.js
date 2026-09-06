@@ -4,6 +4,7 @@ import { auth, db } from "../shared/firebase.js";
 import { dbService } from "../shared/dbService.js";
 import { utils } from "../shared/utils.js";
 import { routesMatrix, getRouteMetrics, terminalCoordinates } from "../shared/routesMatrix.js";
+import { classifyDestination } from "../shared/locationClassifier.js";
 import { bookingService } from "./bookingService.js?v=20260603";
 import { authService } from "../auth/authService.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
@@ -358,6 +359,7 @@ function handlePickupChange() {
 
     toggleCustomAddressFields();
     toggleMapVisibility();
+    syncRideCategoryWithDestination();
 }
 
 function handleDropChange() {
@@ -367,6 +369,79 @@ function handleDropChange() {
     }
     toggleCustomAddressFields();
     toggleMapVisibility();
+    syncRideCategoryWithDestination();
+}
+
+// Dynamically classifies the destination and shows only the matching category
+function syncRideCategoryWithDestination() {
+    const tripType = document.querySelector('input[name="trip-type"]:checked')?.value || "one_way";
+    if (tripType === "round_trip") {
+        utils.hideElement(catLocalContainer);
+        utils.hideElement(catIntercityContainer);
+        utils.hideElement(catOutstationContainer);
+        utils.showElement(catRentalContainer);
+        const rentalRadio = document.querySelector('input[name="ride-category"][value="rental"]');
+        if (rentalRadio && !rentalRadio.checked) {
+            rentalRadio.checked = true;
+            rentalRadio.dispatchEvent(new Event("change"));
+        }
+        return;
+    }
+
+    // Trip type is one_way:
+    utils.hideElement(catRentalContainer);
+    
+    const dropVal = dropSelect.value;
+    if (!dropVal) {
+        // No drop selected yet - restore all 3 one-way categories
+        utils.showElement(catLocalContainer);
+        utils.showElement(catIntercityContainer);
+        utils.showElement(catOutstationContainer);
+        return;
+    }
+
+    let dropCoords = null;
+    let customText = "";
+    if (dropVal === "Custom Location") {
+        dropCoords = customDropCoords;
+        customText = customDropAddress ? customDropAddress.value.trim() : "";
+    } else {
+        const dropLoc = dbLocations.find(l => l.name === dropVal);
+        if (dropLoc) dropCoords = [dropLoc.lat, dropLoc.lng];
+    }
+
+    const determinedCategory = classifyDestination(dropVal, dropCoords, customText);
+    console.log("[CategorySync] Destination:", dropVal, "Coords:", dropCoords, "Determined Category:", determinedCategory);
+
+    if (determinedCategory === "outstation") {
+        utils.hideElement(catLocalContainer);
+        utils.hideElement(catIntercityContainer);
+        utils.showElement(catOutstationContainer);
+        const outstationRadio = document.querySelector('input[name="ride-category"][value="outstation"]');
+        if (outstationRadio && !outstationRadio.checked) {
+            outstationRadio.checked = true;
+            outstationRadio.dispatchEvent(new Event("change"));
+        }
+    } else if (determinedCategory === "intercity") {
+        utils.hideElement(catLocalContainer);
+        utils.showElement(catIntercityContainer);
+        utils.hideElement(catOutstationContainer);
+        const intercityRadio = document.querySelector('input[name="ride-category"][value="intercity"]');
+        if (intercityRadio && !intercityRadio.checked) {
+            intercityRadio.checked = true;
+            intercityRadio.dispatchEvent(new Event("change"));
+        }
+    } else {
+        // Local
+        utils.showElement(catLocalContainer);
+        utils.hideElement(catIntercityContainer);
+        utils.hideElement(catOutstationContainer);
+        const localRadio = document.querySelector('input[name="ride-category"][value="local"]');
+        if (localRadio && !localRadio.checked) {
+            localRadio.checked = true;
+            localRadio.dispatchEvent(new Event("change"));
+        }
+    }
 }
 
 function toggleCustomAddressFields() {
@@ -584,6 +659,7 @@ function setupCustomAddressGeocoding() {
                     console.log("[Geocoding] Custom drop resolved to:", customDropCoords);
                     initOrUpdateMap();
                 }
+                syncRideCategoryWithDestination();
             }
         }, 800);
     });
@@ -621,29 +697,7 @@ function getHaversineDistance(coords1, coords2) {
 function handleTripTypeChange(e) {
     const tripType = e.target.value;
     console.log("[UAT-TripType] Selected Trip Type:", tripType);
-    if (tripType === "one_way") {
-        utils.showElement(catLocalContainer);
-        utils.showElement(catIntercityContainer);
-        utils.showElement(catOutstationContainer);
-        utils.hideElement(catRentalContainer);
-        
-        const localRadio = document.querySelector('input[name="ride-category"][value="local"]');
-        if (localRadio) {
-            localRadio.checked = true;
-            localRadio.dispatchEvent(new Event("change"));
-        }
-    } else {
-        utils.hideElement(catLocalContainer);
-        utils.hideElement(catIntercityContainer);
-        utils.hideElement(catOutstationContainer);
-        utils.showElement(catRentalContainer);
-        
-        const rentalRadio = document.querySelector('input[name="ride-category"][value="rental"]');
-        if (rentalRadio) {
-            rentalRadio.checked = true;
-            rentalRadio.dispatchEvent(new Event("change"));
-        }
-    }
+    syncRideCategoryWithDestination();
 }
 
 // Shows/Hides rental hours and toggles drop select visibility
