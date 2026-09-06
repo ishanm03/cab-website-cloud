@@ -3656,6 +3656,8 @@ async function updateAdminRouteAndFare() {
     const hours = category === "rental" ? parseInt(adminBookingHours.value) : 0;
     const tier = adminBookingTier.value;
     const discountVal = parseFloat(adminBookingDiscount.value) || 0;
+    const timeVal = adminBookingTime ? (adminBookingTime.value || "") : "";
+    const tripTypeVal = adminBookingTripType ? (adminBookingTripType.value || "one_way") : "one_way";
     
     const isPickupCustom = pickup === "custom";
     const isDropCustom = drop === "custom";
