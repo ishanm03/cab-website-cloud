@@ -3404,6 +3404,250 @@ function loadAdminBookingRoster() {
     });
 }
 
+function renderAdminDetailedFareBreakdownHtml(breakdown, discountVal, category, tripType, tier, distanceKm, timeVal) {
+    if (!breakdown) return "";
+    
+    const p = breakdown.params || {};
+    const cfg = p.config || {};
+    const isNight = p.night_applies;
+    const finalFare = Math.max(0, breakdown.total - (discountVal || 0));
+
+    // Category label
+    let categoryLabel = "Local Ride";
+    if (category === "intercity") categoryLabel = "Intercity (Within WB)";
+    else if (category === "outstation") categoryLabel = "Outstation (Outside WB)";
+    else if (category === "rental") categoryLabel = "Hourly Rental";
+
+    let tierLabel = tier ? tier.toUpperCase() : "COMPACT";
+    if (tier === "compact") tierLabel = "Compact (Alto, Kwid)";
+    else if (tier === "premium") tierLabel = "Premium (Dzire, Etios)";
+    else if (tier === "suv") tierLabel = "SUV (Innova, Ertiga)";
+    else if (tier === "muv") tierLabel = "MUV (Up to 12)";
+
+    const tripTypeLabel = (tripType === "round_trip" || category === "rental") ? "Round-Trip" : "One-Way";
+
+    // Parameters items
+    let paramBadges = [];
+    
+    if (category === "outstation" || category === "intercity") {
+        const ratePerKm = parseFloat(cfg.rate_per_km) || 0;
+        const minKmPerDay = parseFloat(cfg.min_km_per_day) || 250;
+        const driverAllowance = parseFloat(cfg.driver_allowance) || 0;
+        const nightHalt = parseFloat(cfg.night_halt) || 0;
+        const roundTripDist = distanceKm * 2.0;
+        const billableKm = Math.max(roundTripDist, minKmPerDay);
+
+        paramBadges = [
+            { label: "Actual 1-Way Dist", val: `${distanceKm} KM` },
+            { label: "Round-Trip Dist", val: `${roundTripDist} KM (x2.0)` },
+            { label: "Min Billed Limit", val: `${minKmPerDay} KM/day` },
+            { label: "Billable Distance", val: `${billableKm} KM` },
+            { label: "Rate / KM", val: `₹${ratePerKm.toFixed(2)} / km` },
+            { label: "Driver Allowance", val: `₹${driverAllowance} / day` },
+            { label: "Night Halt Rate", val: `₹${nightHalt} / night` },
+            { label: "Billed Days", val: `1 Day (Fixed)` }
+        ];
+    } else if (category === "rental") {
+        const baseFare = parseFloat(cfg.base_fare) || 0;
+        const inclKm = parseFloat(cfg.included_km) || 0;
+        const inclHrs = parseFloat(cfg.included_hours) || 0;
+        const extraKmRate = parseFloat(cfg.extra_km_rate) || 0;
+        const extraHrRate = parseFloat(cfg.extra_hour_rate) || 0;
+        const nightCharge = parseFloat(cfg.night_charge) || 0;
+
+        paramBadges = [
+            { label: "Rental Package", val: `${p.actual_hours || inclHrs} Hours` },
+            { label: "Included Distance", val: `${inclKm} KM` },
+            { label: "Included Duration", val: `${inclHrs} Hours` },
+            { label: "Base Package Fare", val: `₹${baseFare}` },
+            { label: "Extra KM Rate", val: `₹${extraKmRate} / km` },
+            { label: "Extra Hour Rate", val: `₹${extraHrRate} / hr` },
+            { label: "Night Fee Rate", val: `₹${nightCharge}` },
+            { label: "Night Time Window", val: `${p.global_config?.night_charge_start || '23:59'} - ${p.global_config?.night_charge_end || '06:00'}` }
+        ];
+    } else if (p.flat_metrics) {
+        paramBadges = [
+            { label: "Predefined Route", val: "Matched Flat Matrix" },
+            { label: "Route Distance", val: `${p.flat_metrics.km || distanceKm} KM` },
+            { label: "Tier Flat Rate", val: `₹${breakdown.base_fare}` },
+            { label: "Pricing Mode", val: "Fixed Flat Fare" }
+        ];
+    } else {
+        // Local dynamic / fallback
+        const baseFare = parseFloat(cfg.base_fare) || 0;
+        const localInclKm = p.local_included_km || 10;
+        const extraKmRate = parseFloat(cfg.extra_km_rate) || 0;
+        const nightCharge = parseFloat(cfg.night_charge) || 0;
+
+        paramBadges = [
+            { label: "Actual Distance", val: `${distanceKm} KM` },
+            { label: "Included Base KM", val: `${localInclKm} KM` },
+            { label: "Base Tier Fare", val: `₹${baseFare}` },
+            { label: "Extra KM Rate", val: `₹${extraKmRate} / km` },
+            { label: "Night Surcharge", val: `₹${nightCharge}` },
+            { label: "Night Status", val: isNight ? `Active (${timeVal || 'Night'})` : `Inactive (Day)` }
+        ];
+    }
+
+    // Line items with math calculation
+    const lineItems = [];
+
+    if (category === "outstation" || category === "intercity") {
+        const ratePerKm = parseFloat(cfg.rate_per_km) || 0;
+        const minKmPerDay = parseFloat(cfg.min_km_per_day) || 250;
+        const roundTripDist = distanceKm * 2.0;
+        const billableKm = Math.max(roundTripDist, minKmPerDay);
+        
+        lineItems.push({
+            name: `Base Distance Fare (${billableKm} km × ₹${ratePerKm}/km)`,
+            subtext: roundTripDist < minKmPerDay ? `Minimum threshold of ${minKmPerDay} km applied (Actual round-trip: ${roundTripDist} km)` : `Actual round-trip distance billed (${distanceKm} km × 2.0)`,
+            amount: breakdown.base_fare
+        });
+
+        if (breakdown.driver_allowance > 0) {
+            lineItems.push({
+                name: `Driver Day Allowance (1 day × ₹${cfg.driver_allowance || 300})`,
+                subtext: `Standard operational driver allowance for ${categoryLabel}`,
+                amount: breakdown.driver_allowance
+            });
+        }
+        if (breakdown.night_halt > 0) {
+            lineItems.push({
+                name: `Driver Night Halt Allowance`,
+                subtext: `Driver overnight accommodation charge`,
+                amount: breakdown.night_halt
+            });
+        }
+    } else if (category === "rental") {
+        lineItems.push({
+            name: `Package Base Fare (${cfg.included_hours || 0} hrs / ${cfg.included_km || 0} km)`,
+            subtext: `Hourly rental package flat base cost`,
+            amount: breakdown.base_fare
+        });
+        if (breakdown.extra_km_charge > 0) {
+            const extraKm = Math.max(0, (p.actual_distance || 0) - (cfg.included_km || 0));
+            lineItems.push({
+                name: `Extra Distance Charge (${extraKm} km × ₹${cfg.extra_km_rate}/km)`,
+                subtext: `Distance exceeding package limit`,
+                amount: breakdown.extra_km_charge
+            });
+        }
+        if (breakdown.extra_hour_charge > 0) {
+            const extraHrs = Math.max(0, (p.actual_hours || 0) - (cfg.included_hours || 0));
+            lineItems.push({
+                name: `Extra Duration Charge (${extraHrs} hrs × ₹${cfg.extra_hour_rate}/hr)`,
+                subtext: `Hours exceeding package limit`,
+                amount: breakdown.extra_hour_charge
+            });
+        }
+        if (breakdown.night_charge > 0) {
+            lineItems.push({
+                name: `Night Surcharge (Pickup at ${timeVal || 'Night'})`,
+                subtext: `Night travel tariff surcharge`,
+                amount: breakdown.night_charge
+            });
+        }
+    } else if (p.flat_metrics) {
+        lineItems.push({
+            name: `Predefined Route Flat Base Fare`,
+            subtext: `Fixed rate agreed for matched predefined route`,
+            amount: breakdown.base_fare
+        });
+    } else {
+        // Local dynamic
+        const localInclKm = p.local_included_km || 10;
+        lineItems.push({
+            name: `Base Fare (Includes first ${localInclKm} km)`,
+            subtext: `Base flag-down fee for ${tierLabel}`,
+            amount: breakdown.base_fare
+        });
+        if (breakdown.extra_km_charge > 0) {
+            const extraKm = Math.max(0, distanceKm - localInclKm);
+            lineItems.push({
+                name: `Extra Distance Charge (${extraKm} km × ₹${cfg.extra_km_rate || 0}/km)`,
+                subtext: `Distance over ${localInclKm} km threshold`,
+                amount: breakdown.extra_km_charge
+            });
+        }
+        if (breakdown.night_charge > 0) {
+            lineItems.push({
+                name: `Night Surcharge (Pickup at ${timeVal || 'Night'})`,
+                subtext: `Night time window surcharge`,
+                amount: breakdown.night_charge
+            });
+        }
+    }
+
+    return `
+        <div class="space-y-3.5">
+            <!-- Header Banner -->
+            <div class="bg-gradient-to-r from-amber-500/15 via-slate-900 to-slate-900 border border-amber-500/30 p-3 rounded-xl flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <span class="text-[10px] uppercase font-bold text-amber-500 tracking-wider block">Fare Calculation Engine</span>
+                    <span class="text-xs font-semibold text-white">${categoryLabel} • ${tierLabel}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 border border-slate-700">${tripTypeLabel}</span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isNight ? 'bg-indigo-950 text-indigo-300 border border-indigo-700' : 'bg-slate-800 text-slate-300 border border-slate-700'}">${isNight ? '🌙 Night Rate' : '☀️ Day Rate'}</span>
+                </div>
+            </div>
+
+            <!-- Human Readable Formula Description -->
+            <div class="bg-slate-900/90 border border-slate-800 p-2.5 rounded-xl text-slate-300 text-[11px] leading-relaxed font-mono">
+                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-0.5">Applied Formula Rule:</span>
+                ${breakdown.description || 'Standard Distance Pricing'}
+            </div>
+
+            <!-- Parameters Grid -->
+            <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Parameters & Tariff Configuration:</span>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    ${paramBadges.map(b => `
+                        <div class="bg-slate-900/60 border border-slate-800/80 p-2 rounded-xl">
+                            <span class="text-[9px] text-slate-400 block truncate">${b.label}</span>
+                            <span class="text-xs font-bold text-white block mt-0.5 truncate">${b.val}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- Line Items Math Table -->
+            <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Itemized Cost Breakdown:</span>
+                <div class="border border-slate-800 rounded-xl overflow-hidden divide-y divide-slate-800/60 bg-slate-950/40">
+                    ${lineItems.map(item => `
+                        <div class="flex justify-between items-center p-2.5 hover:bg-slate-900/30 transition-colors">
+                            <div class="pr-2">
+                                <span class="text-xs font-medium text-slate-200 block">${item.name}</span>
+                                ${item.subtext ? `<span class="text-[10px] text-slate-500 block leading-tight mt-0.5">${item.subtext}</span>` : ''}
+                            </div>
+                            <span class="text-xs font-bold text-white whitespace-nowrap">₹${item.amount.toLocaleString("en-IN")}</span>
+                        </div>
+                    `).join('')}
+
+                    ${discountVal > 0 ? `
+                        <div class="flex justify-between items-center p-2.5 bg-rose-950/20 text-rose-400">
+                            <div>
+                                <span class="text-xs font-medium block">Admin Discount Override</span>
+                                <span class="text-[10px] text-rose-300/70 block leading-tight mt-0.5">Custom discount deducted from subtotal</span>
+                            </div>
+                            <span class="text-xs font-bold whitespace-nowrap">-₹${discountVal.toLocaleString("en-IN")}</span>
+                        </div>
+                    ` : ''}
+
+                    <div class="flex justify-between items-center p-3 bg-amber-500/10 border-t border-amber-500/20">
+                        <div>
+                            <span class="text-xs font-bold text-amber-400 block uppercase tracking-wide">Total Estimated Price</span>
+                            <span class="text-[10px] text-slate-400 block">Final fare payable by passenger</span>
+                        </div>
+                        <span class="text-base font-black text-amber-400">₹${finalFare.toLocaleString("en-IN")}/-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 async function updateAdminRouteAndFare() {
     const category = adminBookingCategory.value;
     const pickup = adminBookingPickup.value;
@@ -3556,6 +3800,7 @@ async function updateAdminRouteAndFare() {
                 polyline = null;
             }
         }
+    }
     
     let computedBaseFare = 0;
     let breakdown = null;
