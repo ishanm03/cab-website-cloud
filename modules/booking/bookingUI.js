@@ -380,11 +380,10 @@ function syncRideCategoryWithDestination() {
         utils.hideElement(catIntercityContainer);
         utils.hideElement(catOutstationContainer);
         utils.showElement(catRentalContainer);
-        const rentalRadio = document.querySelector('input[name="ride-category"][value="rental"]');
-        if (rentalRadio && !rentalRadio.checked) {
-            rentalRadio.checked = true;
-            rentalRadio.dispatchEvent(new Event("change"));
-        }
+        document.querySelectorAll('input[name="ride-category"]').forEach(r => {
+            r.checked = (r.value === "rental");
+        });
+        handleCategoryChange({ target: { value: "rental" } });
         return;
     }
 
@@ -413,35 +412,26 @@ function syncRideCategoryWithDestination() {
     const determinedCategory = classifyDestination(dropVal, dropCoords, customText);
     console.log("[CategorySync] Destination:", dropVal, "Coords:", dropCoords, "Determined Category:", determinedCategory);
 
+    // Hide all 3 categories first
+    utils.hideElement(catLocalContainer);
+    utils.hideElement(catIntercityContainer);
+    utils.hideElement(catOutstationContainer);
+
+    // Show only the determined category
     if (determinedCategory === "outstation") {
-        utils.hideElement(catLocalContainer);
-        utils.hideElement(catIntercityContainer);
         utils.showElement(catOutstationContainer);
-        const outstationRadio = document.querySelector('input[name="ride-category"][value="outstation"]');
-        if (outstationRadio && !outstationRadio.checked) {
-            outstationRadio.checked = true;
-            outstationRadio.dispatchEvent(new Event("change"));
-        }
     } else if (determinedCategory === "intercity") {
-        utils.hideElement(catLocalContainer);
         utils.showElement(catIntercityContainer);
-        utils.hideElement(catOutstationContainer);
-        const intercityRadio = document.querySelector('input[name="ride-category"][value="intercity"]');
-        if (intercityRadio && !intercityRadio.checked) {
-            intercityRadio.checked = true;
-            intercityRadio.dispatchEvent(new Event("change"));
-        }
     } else {
-        // Local
         utils.showElement(catLocalContainer);
-        utils.hideElement(catIntercityContainer);
-        utils.hideElement(catOutstationContainer);
-        const localRadio = document.querySelector('input[name="ride-category"][value="local"]');
-        if (localRadio && !localRadio.checked) {
-            localRadio.checked = true;
-            localRadio.dispatchEvent(new Event("change"));
-        }
     }
+
+    // Set checked state explicitly on the radio inputs
+    document.querySelectorAll('input[name="ride-category"]').forEach(r => {
+        r.checked = (r.value === determinedCategory);
+    });
+
+    handleCategoryChange({ target: { value: determinedCategory } });
 }
 
 function toggleCustomAddressFields() {
