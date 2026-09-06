@@ -90,6 +90,13 @@ const summaryGrandTotal = document.getElementById("summary-grand-total");
 const btnBackTo2 = document.getElementById("btn-back-to-2");
 const btnConfirmBooking = document.getElementById("btn-confirm-booking");
 
+// Step 3 detailed breakdown elements
+const btnToggleFareBreakdown = document.getElementById("btn-toggle-fare-breakdown");
+const breakdownChevron = document.getElementById("breakdown-chevron");
+const fareBreakdownContent = document.getElementById("fare-breakdown-content");
+let isFareBreakdownExpanded = false;
+let currentBreakdownData = null;
+
 // Active Session Context State Variables
 let currentUser = null;
 let currentProfile = null;
@@ -185,6 +192,20 @@ function initBookingUI() {
 
     // 13. Dynamic Geocoding setup for Custom Location inputs
     setupCustomAddressGeocoding();
+
+    // 14. Detailed Fare Breakdown accordion toggle
+    if (btnToggleFareBreakdown) {
+        btnToggleFareBreakdown.addEventListener("click", () => {
+            isFareBreakdownExpanded = !isFareBreakdownExpanded;
+            if (isFareBreakdownExpanded) {
+                fareBreakdownContent.classList.remove("hidden");
+                if (breakdownChevron) breakdownChevron.style.transform = "rotate(180deg)";
+            } else {
+                fareBreakdownContent.classList.add("hidden");
+                if (breakdownChevron) breakdownChevron.style.transform = "rotate(0deg)";
+            }
+        });
+    }
 }
 
 let isLoggingOut = false;
@@ -1038,8 +1059,189 @@ async function loadVisiblePromoChips() {
     }
 }
 
+// Render transparent itemized calculation breakdown for Rider Checkout
+function renderRiderDetailedFareBreakdown(breakdown, discountVal = 0, promoCode = "") {
+    if (!fareBreakdownContent || !breakdown) return;
+    
+    const params = breakdown.params || {};
+    const cfg = params.config || {};
+    const globalCfg = params.global_config || {};
+    const category = currentRouteData.category || "local";
+    const tier = selectedVehicleTier || "compact";
+    const tierNames = { compact: "Sedan / Compact", premium: "Premium Sedan", suv: "SUV (Ertiga / Innova)", muv: "MUV (Innova Crysta)" };
+    const tierLabel = tierNames[tier] || (tier ? tier.toUpperCase() : "");
+    const categoryNames = { local: "Local City Ride", rental: "Hourly Rental", outstation: "Outstation", intercity: "Intercity" };
+    const categoryLabel = categoryNames[category] || (category ? category.toUpperCase() : "");
+    const tripTypeLabel = currentRouteData.tripType === "round_trip" ? "Round-Trip" : "One-Way";
+    const isNight = !!params.night_applies;
+    
+    // Construct param badges
+    const paramBadges = [];
+    if (category === "rental") {
+        const hrs = params.actual_hours || currentRouteData.hours || 1;
+        paramBadges.push({ label: "Rental Time", val: `${hrs} Hour(s)` });
+        paramBadges.push({ label: "Base Package", val: `${cfg.included_hours || 5}h / ${cfg.included_km || 50}km` });
+        paramBadges.push({ label: "Extra Hr Rate", val: `₹${cfg.extra_hour_rate || 0}/hr` });
+        paramBadges.push({ label: "Extra Km Rate", val: `₹${cfg.extra_km_rate || 0}/km` });
+    } else if (category === "outstation" || category === "intercity") {
+        const roundTripDist = Math.round((currentRouteData.km || 0) * 2);
+        paramBadges.push({ label: "One-Way Est.", val: `${currentRouteData.km || 0} km` });
+        paramBadges.push({ label: "Round-Trip Dist.", val: `${roundTripDist} km` });
+        paramBadges.push({ label: "Min Km/Day", val: `${cfg.min_km_per_day || 250} km` });
+        paramBadges.push({ label: "Per Km Rate", val: `₹${cfg.rate_per_km || 0}/km` });
+    } else {
+        paramBadges.push({ label: "Estimated Route", val: `${currentRouteData.km || 0} km` });
+        paramBadges.push({ label: "Base Package", val: `First ${params.local_included_km || 10} km` });
+        paramBadges.push({ label: "Extra Km Rate", val: `₹${cfg.extra_km_rate || 0}/km` });
+        paramBadges.push({ label: "Night Rate", val: `₹${cfg.night_charge || 0}` });
+    }
+
+    // Itemized Line Items
+    const lineItems = [];
+    if (category === "rental") {
+        lineItems.push({
+            name: `Base Rental Package (${cfg.included_hours || 5}h / ${cfg.included_km || 50}km)`,
+            subtext: `Includes initial ${cfg.included_hours || 5} hours and ${cfg.included_km || 50} km drive`,
+            amount: breakdown.base_fare
+        });
+        if (breakdown.extra_hour_charge > 0) {
+            const extraHrs = Math.max(0, (params.actual_hours || currentRouteData.hours || 1) - (parseFloat(cfg.included_hours) || 5));
+            lineItems.push({
+                name: `Extra Duration (${extraHrs} hr × ₹${cfg.extra_hour_rate || 0}/hr)`,
+                subtext: `Hours beyond base package of ${cfg.included_hours || 5}h`,
+                amount: breakdown.extra_hour_charge
+            });
+        }
+        if (breakdown.extra_km_charge > 0) {
+            lineItems.push({
+                name: `Extra Distance Charge`,
+                subtext: `Distance over included ${cfg.included_km || 50} km`,
+                amount: breakdown.extra_km_charge
+            });
+        }
+        if (breakdown.night_charge > 0) {
+            lineItems.push({
+                name: `Night Surcharge`,
+                subtext: `Pickup scheduled between ${globalCfg.night_charge_start || '23:59'} - ${globalCfg.night_charge_end || '06:00'}`,
+                amount: breakdown.night_charge
+            });
+        }
+    } else if (category === "outstation" || category === "intercity") {
+        const roundTripDist = Math.round((currentRouteData.km || 0) * 2);
+        const minKm = parseFloat(cfg.min_km_per_day) || 250;
+        const billedDist = Math.max(roundTripDist, minKm);
+        lineItems.push({
+            name: `Distance Charge (${billedDist} km × ₹${cfg.rate_per_km || 0}/km)`,
+            subtext: roundTripDist < minKm ? `Billed at min daily threshold of ${minKm} km (Round-trip: ${roundTripDist} km)` : `Round-trip distance charge (${currentRouteData.km} km × 2)`,
+            amount: breakdown.base_fare
+        });
+        if (breakdown.driver_allowance > 0) {
+            lineItems.push({
+                name: `Driver Day Allowance`,
+                subtext: `Standard driver allowance per trip day`,
+                amount: breakdown.driver_allowance
+            });
+        }
+        if (breakdown.night_halt > 0) {
+            lineItems.push({
+                name: `Night Halt Charge`,
+                subtext: `Overnight vehicle stay surcharge`,
+                amount: breakdown.night_halt
+            });
+        }
+    } else {
+        const localInclKm = params.local_included_km || 10;
+        lineItems.push({
+            name: `Base Fare (Includes first ${localInclKm} km)`,
+            subtext: `Base flag-down fee for ${tierLabel}`,
+            amount: breakdown.base_fare
+        });
+        if (breakdown.extra_km_charge > 0) {
+            const extraKm = Math.max(0, (currentRouteData.km || 0) - localInclKm);
+            lineItems.push({
+                name: `Extra Distance Charge (${extraKm} km × ₹${cfg.extra_km_rate || 0}/km)`,
+                subtext: `Distance beyond base ${localInclKm} km`,
+                amount: breakdown.extra_km_charge
+            });
+        }
+        if (breakdown.night_charge > 0) {
+            lineItems.push({
+                name: `Night Surcharge`,
+                subtext: `Pickup scheduled between ${globalCfg.night_charge_start || '23:59'} - ${globalCfg.night_charge_end || '06:00'}`,
+                amount: breakdown.night_charge
+            });
+        }
+    }
+
+    const subtotal = breakdown.total || selectedVehicleFare;
+    const finalFare = Math.max(0, subtotal - discountVal);
+
+    fareBreakdownContent.innerHTML = `
+        <div class="space-y-3 bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3.5">
+            <!-- Header Banner -->
+            <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-800/60">
+                <div>
+                    <span class="text-[10px] uppercase font-bold text-amber-500 tracking-wider block">Pricing Calculation Summary</span>
+                    <span class="text-xs font-semibold text-white">${categoryLabel} • ${tierLabel}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-amber-400 border border-slate-700">${tripTypeLabel}</span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isNight ? 'bg-indigo-950 text-indigo-300 border border-indigo-700' : 'bg-slate-800 text-slate-300 border border-slate-700'}">${isNight ? '🌙 Night' : '☀️ Day'}</span>
+                </div>
+            </div>
+
+            <!-- Parameters Grid -->
+            <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Trip Rate Parameters:</span>
+                <div class="grid grid-cols-2 gap-2">
+                    ${paramBadges.map(b => `
+                        <div class="bg-slate-900/80 border border-slate-800/80 p-2 rounded-xl">
+                            <span class="text-[9px] text-slate-400 block truncate">${b.label}</span>
+                            <span class="text-xs font-bold text-white block mt-0.5 truncate">${b.val}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- Itemized Line Items -->
+            <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">Itemized Cost Breakdown:</span>
+                <div class="border border-slate-800/80 rounded-xl overflow-hidden divide-y divide-slate-800/60 bg-slate-900/40">
+                    ${lineItems.map(item => `
+                        <div class="flex justify-between items-center p-2.5">
+                            <div class="pr-2">
+                                <span class="text-xs font-medium text-slate-200 block">${item.name}</span>
+                                ${item.subtext ? `<span class="text-[10px] text-slate-500 block leading-tight mt-0.5">${item.subtext}</span>` : ''}
+                            </div>
+                            <span class="text-xs font-bold text-white whitespace-nowrap">₹${item.amount.toLocaleString("en-IN")}</span>
+                        </div>
+                    `).join('')}
+
+                    ${discountVal > 0 ? `
+                        <div class="flex justify-between items-center p-2.5 bg-emerald-950/30 text-emerald-400">
+                            <div>
+                                <span class="text-xs font-medium block">Promo Code Discount (${promoCode})</span>
+                                <span class="text-[10px] text-emerald-300/70 block leading-tight mt-0.5">Applied savings</span>
+                            </div>
+                            <span class="text-xs font-bold whitespace-nowrap">-₹${discountVal.toLocaleString("en-IN")}</span>
+                        </div>
+                    ` : ''}
+
+                    <div class="flex justify-between items-center p-2.5 bg-amber-500/10 border-t border-amber-500/20">
+                        <div>
+                            <span class="text-xs font-bold text-amber-400 block uppercase tracking-wide">Final Calculated Fare</span>
+                            <span class="text-[10px] text-slate-400 block">Toll & parking extra if applicable</span>
+                        </div>
+                        <span class="text-sm font-black text-amber-400">₹${finalFare.toLocaleString("en-IN")}/-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 // Switches from Step 2 to checkout summary panel (Step 3)
-function navigateToStep3() {
+async function navigateToStep3() {
     if (!selectedVehicleTier) return;
     utils.hideElement(bookingAlert);
 
@@ -1079,6 +1281,25 @@ function navigateToStep3() {
         utils.hideElement(summaryDaysRow);
     }
 
+    // Compute and populate detailed fare breakdown
+    try {
+        const ratesResponse = await bookingService.fetchRates();
+        const activeRates = ratesResponse.rates;
+        currentBreakdownData = bookingService.calculateFareBreakdown(
+            currentRouteData.category,
+            currentRouteData.km,
+            currentRouteData.days,
+            selectedVehicleTier,
+            currentRouteData.flatMetrics,
+            currentRouteData.hours,
+            activeRates,
+            currentRouteData.timeString
+        );
+        renderRiderDetailedFareBreakdown(currentBreakdownData, 0, "");
+    } catch (err) {
+        console.warn("Could not calculate detailed fare breakdown for rider:", err);
+    }
+
     utils.hideElement(panelStep2);
     utils.showElement(panelStep3);
     updateProgressSteps(3);
@@ -1114,6 +1335,11 @@ async function handleApplyPromo() {
             const finalFare = selectedVehicleFare - result.discount;
             summaryGrandTotal.textContent = `₹${finalFare.toLocaleString("en-IN")}`;
             
+            // Re-render itemized breakdown with promo discount
+            if (currentBreakdownData) {
+                renderRiderDetailedFareBreakdown(currentBreakdownData, result.discount, result.code);
+            }
+
             // Show status success message
             promoStatusMsg.textContent = result.message;
             promoStatusMsg.className = "text-xs font-semibold text-center mt-2 text-emerald-500 block";
@@ -1123,6 +1349,10 @@ async function handleApplyPromo() {
             utils.hideElement(summaryDiscountRow);
             summaryGrandTotal.textContent = `₹${selectedVehicleFare.toLocaleString("en-IN")}`;
             
+            if (currentBreakdownData) {
+                renderRiderDetailedFareBreakdown(currentBreakdownData, 0, "");
+            }
+
             promoStatusMsg.textContent = result.message;
             promoStatusMsg.className = "text-xs font-semibold text-center mt-2 text-rose-500 block";
             utils.showElement(promoStatusMsg);
