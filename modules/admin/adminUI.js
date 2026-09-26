@@ -153,6 +153,10 @@ const adminBookingDate = document.getElementById("admin-booking-date");
 const adminBookingTime = document.getElementById("admin-booking-time");
 const adminBookingPickup = document.getElementById("admin-booking-pickup");
 const adminBookingDrop = document.getElementById("admin-booking-drop");
+const adminDropStopsContainer = document.getElementById("admin-drop-stops-container");
+const adminDropStopsList = document.getElementById("admin-drop-stops-list");
+const btnAdminAddStop = document.getElementById("btn-admin-add-stop");
+const adminStopCounterBadge = document.getElementById("admin-stop-counter-badge");
 const adminCustomPickupContainer = document.getElementById("admin-custom-pickup-container");
 const adminCustomDropContainer = document.getElementById("admin-custom-drop-container");
 const adminBookingCustomPickup = document.getElementById("admin-booking-custom-pickup");
@@ -175,6 +179,8 @@ let adminBookingPickupMarker = null;
 let adminBookingDropMarker = null;
 let adminBookingPickupCoords = null;
 let adminBookingDropCoords = null;
+let adminDropStops = []; // Array of { id, rowEl, selectEl, customContainerEl, customInputEl, customCoords }
+let adminBookingStopMarkers = [];
 let currentAdminBreakdown = null;
 
 
@@ -871,6 +877,20 @@ function buildBookingCardContentHtml(booking, isModal = false) {
             </div>
 
             <!-- Trip Routing Details -->
+            ${tripDetails.drop_locations && tripDetails.drop_locations.length > 1 ? `
+            <div class="space-y-1.5 text-xs bg-slate-950/40 p-3 rounded-xl border border-slate-800/80">
+                <div class="flex items-start gap-2">
+                    <span class="text-amber-500 font-bold text-[10px] uppercase tracking-wider w-16 flex-shrink-0">🚩 Pickup:</span>
+                    <span class="font-semibold text-slate-200">${pickupLoc}</span>
+                </div>
+                ${tripDetails.drop_locations.map((loc, idx) => `
+                    <div class="flex items-start gap-2">
+                        <span class="text-amber-400 font-bold text-[10px] uppercase tracking-wider w-16 flex-shrink-0">${idx === tripDetails.drop_locations.length - 1 ? '🏁 Drop:' : `📍 Stop ${idx + 1}:`}</span>
+                        <span class="font-medium text-slate-300">${loc}</span>
+                    </div>
+                `).join('')}
+            </div>
+            ` : `
             <div class="grid grid-cols-2 gap-4 text-xs">
                 <div>
                     <span class="text-slate-500 block">Pickup Location</span>
@@ -881,6 +901,7 @@ function buildBookingCardContentHtml(booking, isModal = false) {
                     <span class="font-semibold text-slate-200 block mt-0.5">${dropLoc}</span>
                 </div>
             </div>
+            `}
 
             <!-- Timings & Category -->
             <div class="grid grid-cols-3 gap-2 text-xs border-y border-slate-800/50 py-3">
@@ -3037,8 +3058,6 @@ async function initAdminBookingForm() {
     // 3. Reset form field visibilities
     utils.hideElement(adminCustomPickupContainer);
     adminBookingCustomPickup.required = false;
-    utils.hideElement(adminCustomDropContainer);
-    adminBookingCustomDrop.required = false;
     utils.hideElement(adminHoursContainer);
     adminBookingHours.required = false;
     
@@ -3050,13 +3069,14 @@ async function initAdminBookingForm() {
     function syncAdminCategoryWithDestination() {
         const type = adminBookingTripType.value;
         const catSelect = adminBookingCategory;
-        if (type === "round_trip") {
-            catSelect.innerHTML = `<option value="rental" selected>Hourly Rental</option>`;
+        if (type === "rental") {
+            catSelect.innerHTML = `<option value="rental" selected>Rental (Hourly Package)</option>`;
             return;
         }
 
-        const dropVal = adminBookingDrop.value;
-        if (!dropVal) {
+        const stopsData = getAdminDropStopsData();
+        const activeStops = stopsData.filter(s => !!s.value);
+        if (activeStops.length === 0) {
             catSelect.innerHTML = `
                 <option value="local" selected>Local (Point to Point)</option>
                 <option value="intercity">Intercity (Within WB)</option>
@@ -3065,28 +3085,30 @@ async function initAdminBookingForm() {
             return;
         }
 
-        let dropCoords = null;
-        let customText = "";
-        if (dropVal === "custom") {
-            dropCoords = adminBookingDropCoords;
-            customText = adminBookingCustomDrop ? adminBookingCustomDrop.value.trim() : "";
-        } else {
-            const found = adminPredefinedLocations.find(l => l.name === dropVal);
-            if (found) dropCoords = [found.lat, found.lng];
+        let highestCategory = "local";
+        for (const stop of activeStops) {
+            const cat = classifyDestination(stop.isCustom ? "Custom Location" : stop.value, stop.coords, stop.customText);
+            if (cat === "outstation") {
+                highestCategory = "outstation";
+                break;
+            } else if (cat === "intercity" && highestCategory !== "outstation") {
+                highestCategory = "intercity";
+            }
         }
 
-        const determinedCategory = classifyDestination(dropVal === "custom" ? "Custom Location" : dropVal, dropCoords, customText);
-
-        if (determinedCategory === "outstation") {
+        if (highestCategory === "outstation") {
             catSelect.innerHTML = `<option value="outstation" selected>Outstation (Outside WB)</option>`;
-        } else if (determinedCategory === "intercity") {
+        } else if (highestCategory === "intercity") {
             catSelect.innerHTML = `<option value="intercity" selected>Intercity (Within WB)</option>`;
         } else {
             catSelect.innerHTML = `<option value="local" selected>Local (Point to Point)</option>`;
         }
     }
 
-    // 4. Bind event listeners (only once)
+    // 4. Initialize Multi-Stop Admin Drop Management
+    initAdminDropStops();
+
+    // 5. Bind event listeners (only once)
     adminBookingTripType.addEventListener("change", () => {
         const type = adminBookingTripType.value;
         console.log("[Admin-TripType] Selected Type:", type);
@@ -3104,23 +3126,7 @@ async function initAdminBookingForm() {
             adminBookingCustomPickup.required = false;
             adminBookingCustomPickup.value = "";
         }
-        updateAdminBookingDropOptions();
-        syncAdminCategoryWithDestination();
-        adminBookingCategory.dispatchEvent(new Event("change"));
-        updateAdminRouteAndFare();
-    });
-    
-    adminBookingDrop.addEventListener("change", () => {
-        const isCustom = adminBookingDrop.value === "custom";
-        const category = adminBookingCategory.value;
-        if (isCustom && category !== "rental") {
-            utils.showElement(adminCustomDropContainer);
-            adminBookingCustomDrop.required = true;
-        } else {
-            utils.hideElement(adminCustomDropContainer);
-            adminBookingCustomDrop.required = false;
-            adminBookingCustomDrop.value = "";
-        }
+        populateAllAdminDropStops();
         syncAdminCategoryWithDestination();
         adminBookingCategory.dispatchEvent(new Event("change"));
         updateAdminRouteAndFare();
@@ -3131,36 +3137,23 @@ async function initAdminBookingForm() {
         if (cat === "rental") {
             utils.showElement(adminHoursContainer);
             adminBookingHours.required = true;
+            if (adminDropStopsContainer) utils.hideElement(adminDropStopsContainer);
+            adminDropStops.forEach(stop => {
+                if (stop.selectEl) {
+                    stop.selectEl.required = false;
+                    stop.selectEl.value = "";
+                }
+            });
         } else {
             utils.hideElement(adminHoursContainer);
             adminBookingHours.required = false;
-        }
-        
-        // Adjust drop location requirements for hourly rentals
-        const isDropCustom = adminBookingDrop.value === "custom";
-        if (cat === "rental") {
-            utils.hideElement(adminCustomDropContainer);
-            adminBookingCustomDrop.required = false;
-            adminBookingDrop.required = false;
-        } else {
-            if (isDropCustom) {
-                utils.showElement(adminCustomDropContainer);
-                adminBookingCustomDrop.required = true;
+            if (adminDropStopsContainer) utils.showElement(adminDropStopsContainer);
+            if (adminDropStops[0] && adminDropStops[0].selectEl) {
+                adminDropStops[0].selectEl.required = true;
             }
-            adminBookingDrop.required = true;
         }
         
         updateAdminRouteAndFare();
-    });
-    
-    let customDropDebounce = null;
-    adminBookingCustomDrop.addEventListener("input", () => {
-        clearTimeout(customDropDebounce);
-        customDropDebounce = setTimeout(() => {
-            syncAdminCategoryWithDestination();
-            adminBookingCategory.dispatchEvent(new Event("change"));
-            updateAdminRouteAndFare();
-        }, 500);
     });
 
     adminBookingDate.addEventListener("change", updateAdminRouteAndFare);
@@ -3173,232 +3166,6 @@ async function initAdminBookingForm() {
     
     isAdminBookingFormInitialized = true;
     updateAdminRouteAndFare();
-}
-
-function hydrateAdminTimeDropdown() {
-    adminBookingTime.innerHTML = "";
-    const periods = ["AM", "PM"];
-    for (let p = 0; p < periods.length; p++) {
-        const period = periods[p];
-        for (let h = 1; h <= 12; h++) {
-            const hourStr = h.toString();
-            const mins = ["00", "30"];
-            for (let m = 0; m < mins.length; m++) {
-                const minStr = mins[m];
-                const timeText = `${hourStr}:${minStr} ${period}`;
-                const opt = document.createElement("option");
-                opt.value = timeText;
-                opt.textContent = timeText;
-                if (timeText === "10:00 AM") opt.selected = true;
-                adminBookingTime.appendChild(opt);
-            }
-        }
-    }
-}
-
-async function loadAdminLocations() {
-    if (!db) return;
-    try {
-        const snap = await getDocs(query(collection(db, "locations"), orderBy("name")));
-        adminPredefinedLocations = snap.docs.map(doc => doc.data());
-        
-        const pickupVal = adminBookingPickup.value;
-        adminBookingPickup.innerHTML = `
-            <option value="" disabled selected>Select Pickup Location</option>
-            <option value="custom">Custom Location</option>
-        `;
-        adminPredefinedLocations.filter(loc => loc.type === "pickup" || loc.type === "both").forEach(loc => {
-            const opt = document.createElement("option");
-            opt.value = loc.name;
-            opt.textContent = loc.name;
-            adminBookingPickup.appendChild(opt);
-        });
-        
-        if (pickupVal) {
-            adminBookingPickup.value = pickupVal;
-        }
-    } catch (err) {
-        console.error("Failed to load locations for admin booking:", err);
-    }
-}
-
-function updateAdminBookingDropOptions() {
-    const pickupVal = adminBookingPickup.value;
-    if (!pickupVal) return;
-    
-    const currentDropVal = adminBookingDrop.value;
-    
-    adminBookingDrop.innerHTML = `
-        <option value="" disabled selected>Select Drop Location</option>
-        <option value="custom">Custom Location</option>
-    `;
-    
-    let drops = [];
-    if (pickupVal === "custom") {
-        drops = adminPredefinedLocations.filter(loc => loc.type === "drop" || loc.type === "both");
-    } else {
-        drops = adminPredefinedLocations.filter(loc => (loc.type === "drop" || loc.type === "both") && loc.name !== pickupVal);
-    }
-    
-    drops.forEach(loc => {
-        const opt = document.createElement("option");
-        opt.value = loc.name;
-        opt.textContent = loc.name;
-        adminBookingDrop.appendChild(opt);
-    });
-    
-    if (currentDropVal) {
-        const exists = drops.some(l => l.name === currentDropVal) || currentDropVal === "custom";
-        if (exists) {
-            adminBookingDrop.value = currentDropVal;
-        }
-    }
-}
-
-function initAdminBookingMap() {
-    const kolkataCenter = [22.5726, 88.3639];
-    
-    if (adminBookingPickupMarker) {
-        if (adminBookingMapInstance) adminBookingMapInstance.removeLayer(adminBookingPickupMarker);
-        adminBookingPickupMarker = null;
-    }
-    if (adminBookingDropMarker) {
-        if (adminBookingMapInstance) adminBookingMapInstance.removeLayer(adminBookingDropMarker);
-        adminBookingDropMarker = null;
-    }
-    adminBookingPickupCoords = null;
-    adminBookingDropCoords = null;
-    updateAdminCoordsBadges();
-    
-    if (!adminBookingMapInstance) {
-        adminBookingMapInstance = L.map('admin-booking-map').setView(kolkataCenter, 12);
-        
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-            maxZoom: 19
-        }).addTo(adminBookingMapInstance);
-        
-        adminBookingMapInstance.on('click', (e) => {
-            const lat = e.latlng.lat;
-            const lng = e.latlng.lng;
-            const target = document.querySelector('input[name="admin-booking-search-target"]:checked')?.value || "pickup";
-            if (target === "pickup") {
-                adminBookingPickupCoords = [lat, lng];
-                if (adminBookingPickupMarker) {
-                    adminBookingPickupMarker.setLatLng(e.latlng);
-                } else {
-                    adminBookingPickupMarker = L.marker(adminBookingPickupCoords, { draggable: true }).addTo(adminBookingMapInstance);
-                    adminBookingPickupMarker.on('dragend', () => {
-                        const pos = adminBookingPickupMarker.getLatLng();
-                        adminBookingPickupCoords = [pos.lat, pos.lng];
-                        updateAdminCoordsBadges();
-                        updateAdminRouteAndFare();
-                    });
-                }
-            } else {
-                adminBookingDropCoords = [lat, lng];
-                if (adminBookingDropMarker) {
-                    adminBookingDropMarker.setLatLng(e.latlng);
-                } else {
-                    adminBookingDropMarker = L.marker(adminBookingDropCoords, { draggable: true }).addTo(adminBookingMapInstance);
-                    adminBookingDropMarker.on('dragend', () => {
-                        const pos = adminBookingDropMarker.getLatLng();
-                        adminBookingDropCoords = [pos.lat, pos.lng];
-                        updateAdminCoordsBadges();
-                        updateAdminRouteAndFare();
-                    });
-                }
-            }
-            updateAdminCoordsBadges();
-            updateAdminRouteAndFare();
-        });
-        
-        btnAdminBookingMapSearch.addEventListener("click", handleAdminBookingMapSearch);
-        adminBookingMapSearch.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-                e.preventDefault();
-                handleAdminBookingMapSearch();
-            }
-        });
-    } else {
-        adminBookingMapInstance.setView(kolkataCenter, 12);
-    }
-    
-    setTimeout(() => {
-        if (adminBookingMapInstance) adminBookingMapInstance.invalidateSize();
-    }, 200);
-}
-
-function updateAdminCoordsBadges() {
-    if (adminBookingPickupCoords) {
-        adminBookingPickupCoordsBadge.textContent = `${adminBookingPickupCoords[0].toFixed(4)}, ${adminBookingPickupCoords[1].toFixed(4)}`;
-    } else {
-        adminBookingPickupCoordsBadge.textContent = "--, --";
-    }
-    
-    if (adminBookingDropCoords) {
-        adminBookingDropCoordsBadge.textContent = `${adminBookingDropCoords[0].toFixed(4)}, ${adminBookingDropCoords[1].toFixed(4)}`;
-    } else {
-        adminBookingDropCoordsBadge.textContent = "--, --";
-    }
-}
-
-async function handleAdminBookingMapSearch() {
-    const queryStr = adminBookingMapSearch.value.trim();
-    if (!queryStr) return;
-    
-    try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryStr)}&limit=1`, {
-            headers: { 'Accept-Language': 'en' }
-        });
-        if (!response.ok) throw new Error("Search request failed");
-        const results = await response.json();
-        if (results && results.length > 0) {
-            const lat = parseFloat(results[0].lat);
-            const lng = parseFloat(results[0].lon);
-            
-            adminBookingMapInstance.setView([lat, lng], 14);
-            const target = document.querySelector('input[name="admin-booking-search-target"]:checked')?.value || "pickup";
-            if (target === "pickup") {
-                adminBookingPickupCoords = [lat, lng];
-                if (adminBookingPickupMarker) {
-                    adminBookingPickupMarker.setLatLng([lat, lng]);
-                } else {
-                    adminBookingPickupMarker = L.marker([lat, lng], { draggable: true }).addTo(adminBookingMapInstance);
-                    adminBookingPickupMarker.on('dragend', () => {
-                        const pos = adminBookingPickupMarker.getLatLng();
-                        adminBookingPickupCoords = [pos.lat, pos.lng];
-                        updateAdminCoordsBadges();
-                        updateAdminRouteAndFare();
-                    });
-                }
-            } else {
-                adminBookingDropCoords = [lat, lng];
-                if (adminBookingDropMarker) {
-                    adminBookingDropMarker.setLatLng([lat, lng]);
-                } else {
-                    adminBookingDropMarker = L.marker([lat, lng], { draggable: true }).addTo(adminBookingMapInstance);
-                    adminBookingDropMarker.on('dragend', () => {
-                        const pos = adminBookingDropMarker.getLatLng();
-                        adminBookingDropCoords = [pos.lat, pos.lng];
-                        syncAdminCategoryWithDestination();
-                        adminBookingCategory.dispatchEvent(new Event("change"));
-                        updateAdminCoordsBadges();
-                        updateAdminRouteAndFare();
-                    });
-                }
-                syncAdminCategoryWithDestination();
-                adminBookingCategory.dispatchEvent(new Event("change"));
-            }
-            updateAdminCoordsBadges();
-            updateAdminRouteAndFare();
-        } else {
-            alert("No locations found for your search query.");
-        }
-    } catch (err) {
-        console.error("Geocoding search failed:", err);
-        alert("Search failed: " + err.message);
-    }
 }
 
 function loadAdminBookingRoster() {
@@ -3714,10 +3481,472 @@ function renderAdminDetailedFareBreakdownHtml(breakdown, discountVal, category, 
     `;
 }
 
+function initAdminDropStops() {
+    const initialRow = document.querySelector('.admin-drop-stop-row[data-index="0"]');
+    const initialSelect = document.getElementById("admin-booking-drop");
+    const initialCustomContainer = document.getElementById("admin-custom-drop-container");
+    const initialCustomInput = document.getElementById("admin-booking-custom-drop");
+
+    adminDropStops = [{
+        id: 0,
+        rowEl: initialRow,
+        selectEl: initialSelect,
+        customContainerEl: initialCustomContainer,
+        customInputEl: initialCustomInput,
+        customCoords: null,
+        customTimer: null
+    }];
+
+    if (initialSelect) {
+        initialSelect.addEventListener("change", () => handleAdminDropChange(0));
+    }
+
+    if (initialCustomInput) {
+        initialCustomInput.addEventListener("input", () => handleAdminCustomDropInput(0));
+    }
+
+    if (btnAdminAddStop) {
+        btnAdminAddStop.addEventListener("click", handleAdminAddDropStop);
+    }
+
+    updateAdminStopLabels();
+}
+
+function renderAdminDropOptionsForSelect(selectEl) {
+    if (!selectEl) return;
+    const currentVal = selectEl.value;
+    const pickupVal = adminBookingPickup ? adminBookingPickup.value : "";
+
+    selectEl.innerHTML = `
+        <option value="" disabled ${!currentVal ? "selected" : ""}>Select Drop Location</option>
+        <option value="custom" ${currentVal === "custom" ? "selected" : ""}>Custom Location</option>
+    `;
+
+    let drops = [];
+    if (pickupVal === "custom") {
+        drops = adminPredefinedLocations.filter(loc => loc.type === "drop" || loc.type === "both");
+    } else {
+        drops = adminPredefinedLocations.filter(loc => (loc.type === "drop" || loc.type === "both") && loc.name !== pickupVal);
+    }
+
+    drops.forEach(loc => {
+        const opt = document.createElement("option");
+        opt.value = loc.name;
+        opt.textContent = loc.name;
+        if (loc.name === currentVal) opt.selected = true;
+        selectEl.appendChild(opt);
+    });
+}
+
+function populateAllAdminDropStops() {
+    adminDropStops.forEach(stop => {
+        renderAdminDropOptionsForSelect(stop.selectEl);
+    });
+}
+
+function handleAdminAddDropStop() {
+    if (adminDropStops.length >= 5) {
+        utils.showAlert(adminAlert, "Maximum of 5 drop stops are supported.");
+        return;
+    }
+
+    const newId = Date.now();
+    const rowDiv = document.createElement("div");
+    rowDiv.className = "admin-drop-stop-row bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2";
+    rowDiv.dataset.id = newId;
+
+    rowDiv.innerHTML = `
+        <div class="flex items-center justify-between">
+            <span class="admin-stop-label text-[10px] font-bold text-amber-500 uppercase tracking-wider"></span>
+            <button type="button" class="btn-admin-remove-stop text-slate-400 hover:text-rose-400 p-1 text-xs font-bold transition-colors flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                <span>Remove</span>
+            </button>
+        </div>
+        <select class="admin-drop-select w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+        </select>
+        <div class="admin-custom-drop-container hidden mt-2">
+            <label class="block text-[10px] font-bold text-amber-500 uppercase mb-1">Custom Drop Address</label>
+            <input type="text" placeholder="Enter custom drop address" class="admin-custom-drop-input w-full bg-slate-950 border border-amber-500/30 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+        </div>
+    `;
+
+    adminDropStopsList.appendChild(rowDiv);
+
+    const selectEl = rowDiv.querySelector(".admin-drop-select");
+    const customContainerEl = rowDiv.querySelector(".admin-custom-drop-container");
+    const customInputEl = rowDiv.querySelector(".admin-custom-drop-input");
+    const btnRemove = rowDiv.querySelector(".btn-admin-remove-stop");
+
+    renderAdminDropOptionsForSelect(selectEl);
+
+    const stopObj = {
+        id: newId,
+        rowEl: rowDiv,
+        selectEl,
+        customContainerEl,
+        customInputEl,
+        customCoords: null,
+        customTimer: null
+    };
+
+    selectEl.addEventListener("change", () => handleAdminDropChange(newId));
+    customInputEl.addEventListener("input", () => handleAdminCustomDropInput(newId));
+    btnRemove.addEventListener("click", () => handleAdminRemoveDropStop(newId));
+
+    adminDropStops.push(stopObj);
+
+    updateAdminStopLabels();
+    syncAdminCategoryWithDestination();
+    updateAdminRouteAndFare();
+}
+
+function handleAdminRemoveDropStop(id) {
+    if (adminDropStops.length <= 1) return;
+
+    const index = adminDropStops.findIndex(s => s.id === id);
+    if (index === -1) return;
+
+    const stopObj = adminDropStops[index];
+    if (stopObj.rowEl && stopObj.rowEl.parentElement) {
+        stopObj.rowEl.remove();
+    }
+
+    adminDropStops.splice(index, 1);
+
+    updateAdminStopLabels();
+    syncAdminCategoryWithDestination();
+    updateAdminRouteAndFare();
+}
+
+function updateAdminStopLabels() {
+    const total = adminDropStops.length;
+    adminDropStops.forEach((stop, idx) => {
+        const labelEl = stop.rowEl.querySelector(".admin-stop-label");
+        const btnRemove = stop.rowEl.querySelector(".btn-admin-remove-stop");
+
+        if (labelEl) {
+            if (total === 1) {
+                labelEl.textContent = "📍 Stop 1 (Destination)";
+            } else if (idx === total - 1) {
+                labelEl.textContent = `📍 Stop ${idx + 1} (Final Destination)`;
+            } else {
+                labelEl.textContent = `📍 Stop ${idx + 1} (Via Point)`;
+            }
+        }
+
+        if (btnRemove) {
+            if (total > 1) {
+                btnRemove.classList.remove("hidden");
+            } else {
+                btnRemove.classList.add("hidden");
+            }
+        }
+    });
+
+    if (adminStopCounterBadge) {
+        adminStopCounterBadge.textContent = `${total} of 5 Stops`;
+    }
+
+    if (btnAdminAddStop) {
+        if (total >= 5) {
+            btnAdminAddStop.classList.add("opacity-50", "pointer-events-none");
+        } else {
+            btnAdminAddStop.classList.remove("opacity-50", "pointer-events-none");
+        }
+    }
+}
+
+function handleAdminDropChange(stopId) {
+    const stopObj = adminDropStops.find(s => s.id === stopId);
+    if (!stopObj) return;
+
+    const isCustom = stopObj.selectEl.value === "custom";
+    if (isCustom) {
+        utils.showElement(stopObj.customContainerEl);
+        if (stopObj.customInputEl) stopObj.customInputEl.required = true;
+    } else {
+        utils.hideElement(stopObj.customContainerEl);
+        if (stopObj.customInputEl) {
+            stopObj.customInputEl.required = false;
+            stopObj.customInputEl.value = "";
+        }
+        stopObj.customCoords = null;
+    }
+
+    syncAdminCategoryWithDestination();
+    updateAdminRouteAndFare();
+}
+
+function handleAdminCustomDropInput(stopId) {
+    const stopObj = adminDropStops.find(s => s.id === stopId);
+    if (!stopObj) return;
+
+    clearTimeout(stopObj.customTimer);
+    stopObj.customTimer = setTimeout(async () => {
+        const address = stopObj.customInputEl.value.trim();
+        if (address.length > 3) {
+            console.log(`[Admin Geocoding] Searching stop ${stopId}:`, address);
+            try {
+                const query = encodeURIComponent(address + ", West Bengal, India");
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
+                    headers: { 'Accept-Language': 'en' }
+                });
+                if (response.ok) {
+                    const results = await response.json();
+                    if (results && results.length > 0) {
+                        stopObj.customCoords = [parseFloat(results[0].lat), parseFloat(results[0].lon)];
+                        console.log(`[Admin Geocoding] Stop ${stopId} resolved to:`, stopObj.customCoords);
+                    }
+                }
+            } catch (e) {
+                console.warn("Geocoding failed for admin drop:", e);
+            }
+        }
+        syncAdminCategoryWithDestination();
+        updateAdminRouteAndFare();
+    }, 600);
+}
+
+function getAdminDropStopsData() {
+    return adminDropStops.map((stop, idx) => {
+        const val = stop.selectEl ? stop.selectEl.value : "";
+        const isCustom = val === "custom";
+        const customText = (isCustom && stop.customInputEl) ? stop.customInputEl.value.trim() : "";
+        let coords = null;
+        if (isCustom) {
+            coords = stop.customCoords || adminBookingDropCoords;
+        } else if (val) {
+            const loc = adminPredefinedLocations.find(l => l.name === val);
+            if (loc) coords = [loc.lat, loc.lng];
+        }
+        return {
+            id: stop.id,
+            index: idx,
+            value: val,
+            isCustom,
+            customText,
+            name: isCustom ? customText : val,
+            coords
+        };
+    });
+}
+
+function hydrateAdminTimeDropdown() {
+    adminBookingTime.innerHTML = "";
+    const periods = ["AM", "PM"];
+    for (let p = 0; p < periods.length; p++) {
+        const period = periods[p];
+        for (let h = 1; h <= 12; h++) {
+            const hourStr = h.toString();
+            const mins = ["00", "30"];
+            for (let m = 0; m < mins.length; m++) {
+                const minStr = mins[m];
+                const timeText = `${hourStr}:${minStr} ${period}`;
+                const opt = document.createElement("option");
+                opt.value = timeText;
+                opt.textContent = timeText;
+                if (timeText === "10:00 AM") opt.selected = true;
+                adminBookingTime.appendChild(opt);
+            }
+        }
+    }
+}
+
+async function loadAdminLocations() {
+    if (!db) return;
+    try {
+        const snap = await getDocs(query(collection(db, "locations"), orderBy("name")));
+        adminPredefinedLocations = snap.docs.map(doc => doc.data());
+        
+        const pickupVal = adminBookingPickup.value;
+        adminBookingPickup.innerHTML = `
+            <option value="" disabled selected>Select Pickup Location</option>
+            <option value="custom">Custom Location</option>
+        `;
+        adminPredefinedLocations.filter(loc => loc.type === "pickup" || loc.type === "both").forEach(loc => {
+            const opt = document.createElement("option");
+            opt.value = loc.name;
+            opt.textContent = loc.name;
+            adminBookingPickup.appendChild(opt);
+        });
+        
+        if (pickupVal) {
+            adminBookingPickup.value = pickupVal;
+        }
+
+        populateAllAdminDropStops();
+    } catch (err) {
+        console.error("Failed to load locations for admin booking:", err);
+    }
+}
+
+function updateAdminBookingDropOptions() {
+    populateAllAdminDropStops();
+}
+
+function initAdminBookingMap() {
+    const kolkataCenter = [22.5726, 88.3639];
+    
+    if (adminBookingPickupMarker) {
+        if (adminBookingMapInstance) adminBookingMapInstance.removeLayer(adminBookingPickupMarker);
+        adminBookingPickupMarker = null;
+    }
+    if (adminBookingDropMarker) {
+        if (adminBookingMapInstance) adminBookingMapInstance.removeLayer(adminBookingDropMarker);
+        adminBookingDropMarker = null;
+    }
+    adminBookingStopMarkers.forEach(m => {
+        if (adminBookingMapInstance) adminBookingMapInstance.removeLayer(m);
+    });
+    adminBookingStopMarkers = [];
+
+    adminBookingPickupCoords = null;
+    adminBookingDropCoords = null;
+    updateAdminCoordsBadges();
+    
+    if (!adminBookingMapInstance) {
+        adminBookingMapInstance = L.map('admin-booking-map').setView(kolkataCenter, 12);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(adminBookingMapInstance);
+        
+        adminBookingMapInstance.on('click', (e) => {
+            const lat = e.latlng.lat;
+            const lng = e.latlng.lng;
+            const target = document.querySelector('input[name="admin-booking-search-target"]:checked')?.value || "pickup";
+            if (target === "pickup") {
+                adminBookingPickupCoords = [lat, lng];
+                if (adminBookingPickupMarker) {
+                    adminBookingPickupMarker.setLatLng(e.latlng);
+                } else {
+                    adminBookingPickupMarker = L.marker(adminBookingPickupCoords, { draggable: true }).addTo(adminBookingMapInstance);
+                    adminBookingPickupMarker.on('dragend', () => {
+                        const pos = adminBookingPickupMarker.getLatLng();
+                        adminBookingPickupCoords = [pos.lat, pos.lng];
+                        updateAdminCoordsBadges();
+                        updateAdminRouteAndFare();
+                    });
+                }
+            } else {
+                adminBookingDropCoords = [lat, lng];
+                if (adminDropStops[0]) {
+                    adminDropStops[0].customCoords = adminBookingDropCoords;
+                }
+                if (adminBookingDropMarker) {
+                    adminBookingDropMarker.setLatLng(e.latlng);
+                } else {
+                    adminBookingDropMarker = L.marker(adminBookingDropCoords, { draggable: true }).addTo(adminBookingMapInstance);
+                    adminBookingDropMarker.on('dragend', () => {
+                        const pos = adminBookingDropMarker.getLatLng();
+                        adminBookingDropCoords = [pos.lat, pos.lng];
+                        if (adminDropStops[0]) adminDropStops[0].customCoords = adminBookingDropCoords;
+                        updateAdminCoordsBadges();
+                        updateAdminRouteAndFare();
+                    });
+                }
+            }
+            updateAdminCoordsBadges();
+            updateAdminRouteAndFare();
+        });
+        
+        btnAdminBookingMapSearch.addEventListener("click", handleAdminBookingMapSearch);
+        adminBookingMapSearch.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                handleAdminBookingMapSearch();
+            }
+        });
+    } else {
+        adminBookingMapInstance.setView(kolkataCenter, 12);
+    }
+    
+    setTimeout(() => {
+        if (adminBookingMapInstance) adminBookingMapInstance.invalidateSize();
+    }, 200);
+}
+
+function updateAdminCoordsBadges() {
+    if (adminBookingPickupCoords) {
+        adminBookingPickupCoordsBadge.textContent = `${adminBookingPickupCoords[0].toFixed(4)}, ${adminBookingPickupCoords[1].toFixed(4)}`;
+    } else {
+        adminBookingPickupCoordsBadge.textContent = "--, --";
+    }
+    
+    if (adminBookingDropCoords) {
+        adminBookingDropCoordsBadge.textContent = `${adminBookingDropCoords[0].toFixed(4)}, ${adminBookingDropCoords[1].toFixed(4)}`;
+    } else {
+        adminBookingDropCoordsBadge.textContent = "--, --";
+    }
+}
+
+async function handleAdminBookingMapSearch() {
+    const queryStr = adminBookingMapSearch.value.trim();
+    if (!queryStr) return;
+    
+    try {
+        const query = encodeURIComponent(queryStr + ", West Bengal, India");
+        const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1`, {
+            headers: { 'Accept-Language': 'en' }
+        });
+        if (!response.ok) throw new Error("Geocoding failed");
+        const results = await response.json();
+        
+        if (results && results.length > 0) {
+            const lat = parseFloat(results[0].lat);
+            const lng = parseFloat(results[0].lon);
+            const target = document.querySelector('input[name="admin-booking-search-target"]:checked')?.value || "pickup";
+            
+            if (adminBookingMapInstance) {
+                adminBookingMapInstance.setView([lat, lng], 14);
+            }
+            
+            if (target === "pickup") {
+                adminBookingPickupCoords = [lat, lng];
+                if (adminBookingPickupMarker) {
+                    adminBookingPickupMarker.setLatLng([lat, lng]);
+                } else {
+                    adminBookingPickupMarker = L.marker([lat, lng], { draggable: true }).addTo(adminBookingMapInstance);
+                    adminBookingPickupMarker.on('dragend', () => {
+                        const pos = adminBookingPickupMarker.getLatLng();
+                        adminBookingPickupCoords = [pos.lat, pos.lng];
+                        updateAdminCoordsBadges();
+                        updateAdminRouteAndFare();
+                    });
+                }
+            } else {
+                adminBookingDropCoords = [lat, lng];
+                if (adminDropStops[0]) {
+                    adminDropStops[0].customCoords = adminBookingDropCoords;
+                }
+                if (adminBookingDropMarker) {
+                    adminBookingDropMarker.setLatLng([lat, lng]);
+                } else {
+                    adminBookingDropMarker = L.marker([lat, lng], { draggable: true }).addTo(adminBookingMapInstance);
+                    adminBookingDropMarker.on('dragend', () => {
+                        const pos = adminBookingDropMarker.getLatLng();
+                        adminBookingDropCoords = [pos.lat, pos.lng];
+                        if (adminDropStops[0]) adminDropStops[0].customCoords = adminBookingDropCoords;
+                        updateAdminCoordsBadges();
+                        updateAdminRouteAndFare();
+                    });
+                }
+            }
+            updateAdminCoordsBadges();
+            updateAdminRouteAndFare();
+        } else {
+            alert("No results found for that location query.");
+        }
+    } catch (err) {
+        alert("Search failed: " + err.message);
+    }
+}
+
 async function updateAdminRouteAndFare() {
     const category = adminBookingCategory.value;
     const pickup = adminBookingPickup.value;
-    const drop = adminBookingDrop.value;
     const days = 1;
     const hours = category === "rental" ? parseInt(adminBookingHours.value) : 0;
     const tier = adminBookingTier.value;
@@ -3726,10 +3955,7 @@ async function updateAdminRouteAndFare() {
     const tripTypeVal = adminBookingTripType ? (adminBookingTripType.value || "one_way") : "one_way";
     
     const isPickupCustom = pickup === "custom";
-    const isDropCustom = drop === "custom";
-    
     let pickupCoords = null;
-    let dropCoords = null;
     
     if (!isPickupCustom && pickup) {
         const found = adminPredefinedLocations.find(l => l.name === pickup);
@@ -3740,17 +3966,21 @@ async function updateAdminRouteAndFare() {
         pickupCoords = adminBookingPickupCoords;
     }
     
+    const stopsData = getAdminDropStopsData();
+    const isMultiHop = stopsData.length > 1;
+    const isAnyDropCustom = stopsData.some(s => s.isCustom);
+    const dropWaypoints = [];
+
     if (category !== "rental") {
-        if (!isDropCustom && drop) {
-            const found = adminPredefinedLocations.find(l => l.name === drop);
-            if (found) {
-                dropCoords = [found.lat, found.lng];
-            }
-        } else if (isDropCustom) {
-            dropCoords = adminBookingDropCoords;
-        }
+        stopsData.forEach(stop => {
+            if (stop.coords) dropWaypoints.push(stop.coords);
+        });
     }
-    
+
+    const allWaypoints = [];
+    if (pickupCoords) allWaypoints.push(pickupCoords);
+    allWaypoints.push(...dropWaypoints);
+
     if (adminBookingMapInstance) {
         if (pickupCoords) {
             if (adminBookingPickupMarker) {
@@ -3771,18 +4001,31 @@ async function updateAdminRouteAndFare() {
             }
         }
         
-        if (dropCoords) {
-            if (adminBookingDropMarker) {
-                adminBookingDropMarker.setLatLng(dropCoords);
-            } else {
-                adminBookingDropMarker = L.marker(dropCoords, { draggable: true }).addTo(adminBookingMapInstance);
-                adminBookingDropMarker.on('dragend', () => {
-                    const pos = adminBookingDropMarker.getLatLng();
-                    adminBookingDropCoords = [pos.lat, pos.lng];
-                    updateAdminCoordsBadges();
-                    updateAdminRouteAndFare();
-                });
-            }
+        // Clear old intermediate stop markers
+        adminBookingStopMarkers.forEach(m => adminBookingMapInstance.removeLayer(m));
+        adminBookingStopMarkers = [];
+
+        if (category !== "rental" && dropWaypoints.length > 0) {
+            dropWaypoints.forEach((coords, idx) => {
+                const isFirst = (idx === 0);
+                if (isFirst) {
+                    if (adminBookingDropMarker) {
+                        adminBookingDropMarker.setLatLng(coords);
+                    } else {
+                        adminBookingDropMarker = L.marker(coords, { draggable: true }).addTo(adminBookingMapInstance);
+                        adminBookingDropMarker.on('dragend', () => {
+                            const pos = adminBookingDropMarker.getLatLng();
+                            adminBookingDropCoords = [pos.lat, pos.lng];
+                            if (adminDropStops[0]) adminDropStops[0].customCoords = adminBookingDropCoords;
+                            updateAdminCoordsBadges();
+                            updateAdminRouteAndFare();
+                        });
+                    }
+                } else {
+                    const marker = L.marker(coords).addTo(adminBookingMapInstance);
+                    adminBookingStopMarkers.push(marker);
+                }
+            });
         } else {
             if (adminBookingDropMarker) {
                 adminBookingMapInstance.removeLayer(adminBookingDropMarker);
@@ -3801,12 +4044,13 @@ async function updateAdminRouteAndFare() {
         distanceKm = 0;
         polyline = null;
     } else {
-        if (!isPickupCustom && !isDropCustom && pickup && drop) {
+        const primaryDrop = stopsData[0]?.value;
+        if (!isPickupCustom && !isAnyDropCustom && !isMultiHop && pickup && primaryDrop) {
             try {
                 const flatFareQuery = query(
                     collection(db, "flat_fares"),
                     where("pickup_name", "==", pickup),
-                    where("drop_name", "==", drop)
+                    where("drop_name", "==", primaryDrop)
                 );
                 const flatFareSnap = await getDocs(flatFareQuery);
                 if (!flatFareSnap.empty) {
@@ -3826,14 +4070,10 @@ async function updateAdminRouteAndFare() {
         }
         
         if (!metrics) {
-            if (pickupCoords && dropCoords) {
+            if (allWaypoints.length >= 2) {
                 try {
-                    const pickupLng = pickupCoords[1];
-                    const pickupLat = pickupCoords[0];
-                    const dropLng = dropCoords[1];
-                    const dropLat = dropCoords[0];
-                    
-                    const url = `https://router.project-osrm.org/route/v1/driving/${pickupLng},${pickupLat};${dropLng},${dropLat}?overview=full&geometries=geojson`;
+                    const coordsString = allWaypoints.map(pt => `${pt[1]},${pt[0]}`).join(';');
+                    const url = `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=full&geometries=geojson`;
                     const response = await fetch(url);
                     if (!response.ok) throw new Error("OSRM route fetch failed");
                     const data = await response.json();
@@ -3848,20 +4088,21 @@ async function updateAdminRouteAndFare() {
                     }
                 } catch (err) {
                     console.warn("OSRM failed for admin, using Haversine:", err);
-                    const pickupLat = pickupCoords[0];
-                    const pickupLng = pickupCoords[1];
-                    const dropLat = dropCoords[0];
-                    const dropLng = dropCoords[1];
-                    
-                    const R = 6371;
-                    const dLat = (dropLat - pickupLat) * Math.PI / 180;
-                    const dLng = (dropLng - pickupLng) * Math.PI / 180;
-                    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                              Math.cos(pickupLat * Math.PI / 180) * Math.cos(dropLat * Math.PI / 180) *
-                              Math.sin(dLng / 2) * Math.sin(dLng / 2);
-                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                    distanceKm = Math.ceil(R * c * 1.3);
-                    polyline = [pickupCoords, dropCoords];
+                    let hDist = 0;
+                    for (let i = 0; i < allWaypoints.length - 1; i++) {
+                        const p1 = allWaypoints[i];
+                        const p2 = allWaypoints[i+1];
+                        const R = 6371;
+                        const dLat = (p2[0] - p1[0]) * Math.PI / 180;
+                        const dLng = (p2[1] - p1[1]) * Math.PI / 180;
+                        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                                  Math.cos(p1[0] * Math.PI / 180) * Math.cos(p2[0] * Math.PI / 180) *
+                                  Math.sin(dLng / 2) * Math.sin(dLng / 2);
+                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                        hDist += Math.ceil(R * c * 1.3);
+                    }
+                    distanceKm = hDist;
+                    polyline = allWaypoints;
                 }
             } else {
                 distanceKm = 0;
@@ -3900,7 +4141,8 @@ async function updateAdminRouteAndFare() {
     currentAdminBreakdown = breakdown;
 
     // Render detailed fare breakdown for Admin UAT visibility
-    if (breakdown && (pickup && (category === "rental" || drop))) {
+    const hasAnyDropVal = stopsData.some(s => !!s.value);
+    if (breakdown && (pickup && (category === "rental" || hasAnyDropVal))) {
         utils.showElement(adminBookingBreakdownPanel);
         adminBookingBreakdownContent.innerHTML = renderAdminDetailedFareBreakdownHtml(
             breakdown,
@@ -3918,9 +4160,9 @@ async function updateAdminRouteAndFare() {
     const submitBtn = adminBookingForm ? adminBookingForm.querySelector('button[type="submit"]') : null;
     if (submitBtn) {
         let text = `Log Booking Request (Est: ₹${currentAdminEstimatedFare})`;
-        if (category !== "rental" && (!pickup || !drop)) {
+        if (category !== "rental" && (!pickup || !hasAnyDropVal)) {
             text = `Log Booking Request (Est. Base Fare: ₹${currentAdminEstimatedFare})`;
-        } else if (category !== "rental" && (isPickupCustom || isDropCustom) && (!pickupCoords || !dropCoords)) {
+        } else if (category !== "rental" && (isPickupCustom || isAnyDropCustom) && allWaypoints.length < 2) {
             text = `Log Booking Request (Pending Map Pin - Est: Base fare ₹${currentAdminEstimatedFare})`;
         }
         submitBtn.textContent = text;
@@ -3938,9 +4180,7 @@ async function handleAdminBookingFormSubmit(e) {
     const dateVal = adminBookingDate.value;
     const timeVal = adminBookingTime.value;
     const pickupVal = adminBookingPickup.value;
-    const dropVal = adminBookingDrop.value;
     const customPickupVal = adminBookingCustomPickup.value.trim();
-    const customDropVal = adminBookingCustomDrop.value.trim();
     const days = (category === "outstation" || category === "intercity") ? 1 : null;
     const hours = category === "rental" ? (parseInt(adminBookingHours.value) || 5) : null;
     const tier = adminBookingTier.value;
@@ -3957,27 +4197,47 @@ async function handleAdminBookingFormSubmit(e) {
         return;
     }
     
-    if (category !== "rental" && !dropVal) {
-        utils.showAlert(adminAlert, "Please select a drop location.");
-        return;
-    }
-    
     const isPickupCustom = pickupVal === "custom";
-    const isDropCustom = dropVal === "custom";
-    
     if (isPickupCustom && !customPickupVal) {
         utils.showAlert(adminAlert, "Please enter a custom pickup address.");
         return;
     }
-    
-    if (category !== "rental" && isDropCustom && !customDropVal) {
-        utils.showAlert(adminAlert, "Please enter a custom drop address.");
-        return;
+
+    const stopsData = getAdminDropStopsData();
+    let resolvedDropNames = [];
+    let dropWaypoints = [];
+    let isAnyDropCustom = false;
+
+    if (category === "rental") {
+        resolvedDropNames = ["N/A (Hourly Rental)"];
+    } else {
+        if (stopsData.length === 0 || !stopsData[0].value) {
+            utils.showAlert(adminAlert, "Please select at least one drop location.");
+            return;
+        }
+
+        for (let i = 0; i < stopsData.length; i++) {
+            const stop = stopsData[i];
+            if (!stop.value) {
+                utils.showAlert(adminAlert, `Please select a destination for Stop ${i + 1}.`);
+                return;
+            }
+            if (stop.isCustom) {
+                isAnyDropCustom = true;
+                if (!stop.customText) {
+                    utils.showAlert(adminAlert, `Please enter a custom address for Stop ${i + 1}.`);
+                    return;
+                }
+                resolvedDropNames.push(stop.customText);
+                if (stop.coords) dropWaypoints.push(stop.coords);
+            } else {
+                resolvedDropNames.push(stop.value);
+                if (stop.coords) dropWaypoints.push(stop.coords);
+            }
+        }
     }
     
     let pickupCoords = null;
-    let dropCoords = null;
-    
     if (!isPickupCustom) {
         const found = adminPredefinedLocations.find(l => l.name === pickupVal);
         if (found) pickupCoords = [found.lat, found.lng];
@@ -3985,22 +4245,13 @@ async function handleAdminBookingFormSubmit(e) {
         pickupCoords = adminBookingPickupCoords;
     }
     
-    if (category !== "rental") {
-        if (!isDropCustom) {
-            const found = adminPredefinedLocations.find(l => l.name === dropVal);
-            if (found) dropCoords = [found.lat, found.lng];
-        } else {
-            dropCoords = adminBookingDropCoords;
-        }
-    }
-    
     if (adminBookingSaveCoords.checked) {
         if (isPickupCustom && !pickupCoords) {
             utils.showAlert(adminAlert, "Please pin the custom pickup location on the map or uncheck 'Use Geocoded Map Route'.");
             return;
         }
-        if (category !== "rental" && isDropCustom && !dropCoords) {
-            utils.showAlert(adminAlert, "Please pin the custom drop location on the map or uncheck 'Use Geocoded Map Route'.");
+        if (category !== "rental" && isAnyDropCustom && dropWaypoints.length === 0) {
+            utils.showAlert(adminAlert, "Please pin custom drop location(s) on the map or uncheck 'Use Geocoded Map Route'.");
             return;
         }
     }
@@ -4027,7 +4278,7 @@ async function handleAdminBookingFormSubmit(e) {
     }
     
     const pickupLocName = isPickupCustom ? customPickupVal : pickupVal;
-    const dropLocName = category === "rental" ? "N/A (Hourly Rental)" : (isDropCustom ? customDropVal : dropVal);
+    const finalDropLocName = resolvedDropNames[resolvedDropNames.length - 1] || "N/A";
     
     const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const randomHex = Math.floor(1000 + Math.random() * 9000).toString();
@@ -4045,13 +4296,14 @@ async function handleAdminBookingFormSubmit(e) {
             ride_type: category,
             trip_type: tripType,
             pickup_location: pickupLocName,
-            drop_location: dropLocName,
+            drop_location: finalDropLocName,
+            drop_locations: resolvedDropNames,
             pickup_date: dateVal,
             pickup_time: timeVal,
             outstation_days: days,
             rental_hours: hours,
             pickup_coords: pickupCoords || null,
-            drop_coords: dropCoords || null,
+            drop_coords: dropWaypoints[dropWaypoints.length - 1] || null,
             route_polyline: currentAdminPolyline ? JSON.stringify(currentAdminPolyline) : null
         },
         fare_details: {
@@ -4092,6 +4344,10 @@ async function handleAdminBookingFormSubmit(e) {
             adminBookingMapInstance.removeLayer(adminBookingDropMarker);
             adminBookingDropMarker = null;
         }
+        adminBookingStopMarkers.forEach(m => {
+            if (adminBookingMapInstance) adminBookingMapInstance.removeLayer(m);
+        });
+        adminBookingStopMarkers = [];
         updateAdminCoordsBadges();
         
         adminBookingPickup.value = "";

@@ -1046,24 +1046,41 @@
                                     <select id="admin-booking-pickup" required class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
                                         <option value="" disabled selected>Select Pickup Location</option>
                                     </select>
-                                </div>
-                                <div id="admin-drop-container">
-                                    <label for="admin-booking-drop" class="block text-[10px] font-bold text-slate-400 uppercase mb-1">Drop Location</label>
-                                    <select id="admin-booking-drop" required class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
-                                        <option value="" disabled selected>Select Drop Location</option>
-                                    </select>
+                                    <!-- Custom pickup address text input -->
+                                    <div id="admin-custom-pickup-container" class="hidden mt-2">
+                                        <label for="admin-booking-custom-pickup" class="block text-[10px] font-bold text-amber-500 uppercase mb-1">Custom Pickup Address</label>
+                                        <input type="text" id="admin-booking-custom-pickup" placeholder="Enter custom pickup address" class="w-full bg-slate-950 border border-amber-500/30 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Custom address text inputs (hidden by default) -->
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div id="admin-custom-pickup-container" class="hidden">
-                                    <label for="admin-booking-custom-pickup" class="block text-[10px] font-bold text-amber-500 uppercase mb-1">Custom Pickup Address</label>
-                                    <input type="text" id="admin-booking-custom-pickup" placeholder="Enter custom pickup address" class="w-full bg-slate-950 border border-amber-500/30 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                            <!-- Dynamic Multi-Stop Drop Container -->
+                            <div id="admin-drop-stops-container" class="space-y-3">
+                                <div class="flex justify-between items-center">
+                                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Destination / Drop Location(s)</label>
+                                    <span id="admin-stop-counter-badge" class="text-[10px] text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">1 of 5 Stops</span>
                                 </div>
-                                <div id="admin-custom-drop-container" class="hidden">
-                                    <label for="admin-booking-custom-drop" class="block text-[10px] font-bold text-amber-500 uppercase mb-1">Custom Drop Address</label>
-                                    <input type="text" id="admin-booking-custom-drop" placeholder="Enter custom drop address" class="w-full bg-slate-950 border border-amber-500/30 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                <div id="admin-drop-stops-list" class="space-y-3">
+                                    <!-- Stop 1 (Primary Destination) -->
+                                    <div class="admin-drop-stop-row bg-slate-950/60 p-3 rounded-xl border border-slate-800 space-y-2" data-index="0">
+                                        <div class="flex items-center justify-between">
+                                            <span class="admin-stop-label text-[10px] font-bold text-amber-500 uppercase tracking-wider">📍 Stop 1 (Destination)</span>
+                                        </div>
+                                        <select id="admin-booking-drop" required class="admin-drop-select w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                            <option value="" disabled selected>Select Drop Location</option>
+                                        </select>
+                                        <div id="admin-custom-drop-container" class="admin-custom-drop-container hidden mt-2">
+                                            <label for="admin-booking-custom-drop" class="block text-[10px] font-bold text-amber-500 uppercase mb-1">Custom Drop Address</label>
+                                            <input type="text" id="admin-booking-custom-drop" placeholder="Enter custom drop address" class="admin-custom-drop-input w-full bg-slate-950 border border-amber-500/30 focus:border-amber-500 text-white px-3 py-2.5 rounded-xl outline-none text-sm font-medium">
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Add Stop Button -->
+                                <div class="flex justify-start">
+                                    <button type="button" id="btn-admin-add-stop" class="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1.5 py-1.5 px-3 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition-all">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                                        <span>Add Stopover / Via Point</span>
+                                    </button>
                                 </div>
                             </div>
 
@@ -1510,6 +1527,6 @@
     </div>
 
     <!-- Core Javascript Modules Loading -->
-    <script type="module" src="adminUI.js?v=20260906"></script>
+    <script type="module" src="adminUI.js?v=20260906_1430"></script>
 </body>
 </html>

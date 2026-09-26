@@ -340,9 +340,10 @@ async def estimate_quote(
             )
         active_rates = doc.to_dict()
                 
-        # Query flat fare overrides
+        # Query flat fare overrides (only applicable for single-hop direct routes)
         flat_metrics = None
-        if db is not None:
+        is_multi_hop = bool(request.drop_locations and len(request.drop_locations) > 1)
+        if db is not None and not is_multi_hop:
             flat_fares = db.collection("flat_fares") \
                 .where("pickup_name", "==", request.pickup) \
                 .where("drop_name", "==", request.drop) \

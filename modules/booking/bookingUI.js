@@ -45,6 +45,10 @@ const panelStep3 = document.getElementById("panel-step-3");
 const formStep1 = document.getElementById("form-step-1");
 const pickupSelect = document.getElementById("pickup-select");
 const dropSelect = document.getElementById("drop-select");
+const dropStopsWrapper = document.getElementById("drop-stops-wrapper");
+const dropStopsList = document.getElementById("drop-stops-list");
+const btnAddStop = document.getElementById("btn-add-stop");
+const stopCounterBadge = document.getElementById("stop-counter-badge");
 const pickupDate = document.getElementById("pickup-date");
 const pickupTime = document.getElementById("pickup-time");
 const tripTypeRadios = document.getElementsByName("trip-type");
@@ -62,6 +66,10 @@ const customPickupAddress = document.getElementById("custom-pickup-address");
 const customDropContainer = document.getElementById("custom-drop-container");
 const customDropAddress = document.getElementById("custom-drop-address");
 const customFareNotice = document.getElementById("custom-fare-notice");
+
+// Multi-drop stops state
+let dropStops = []; // Array of { id, rowEl, selectEl, customContainerEl, customInputEl, customCoords, customTimer }
+let mapStopMarkers = []; // Array of Leaflet markers for intermediate stops
 
 // Step 2 elements
 const routeKmBadge = document.getElementById("route-km-badge");
@@ -156,7 +164,10 @@ function initBookingUI() {
 
     // 4. Change pickups and populate drop options
     pickupSelect.addEventListener("change", handlePickupChange);
-    dropSelect.addEventListener("change", handleDropChange);
+    initDropStops();
+    if (btnAddStop) {
+        btnAddStop.addEventListener("click", handleAddDropStop);
+    }
 
     // 5. Trip Type listener
     tripTypeRadios.forEach(radio => {
@@ -324,6 +335,224 @@ function hydratePickupLocations() {
     });
 }
 
+// Initializes the initial drop stop row and wires event listeners
+function initDropStops() {
+    const initialRow = document.querySelector('.drop-stop-row[data-index="0"]');
+    const initialSelect = document.getElementById("drop-select");
+    const initialCustomContainer = document.getElementById("custom-drop-container");
+    const initialCustomInput = document.getElementById("custom-drop-address");
+
+    dropStops = [{
+        id: 0,
+        rowEl: initialRow,
+        selectEl: initialSelect,
+        customContainerEl: initialCustomContainer,
+        customInputEl: initialCustomInput,
+        customCoords: null,
+        customTimer: null
+    }];
+
+    if (initialSelect) {
+        initialSelect.addEventListener("change", () => handleDropChange(0));
+    }
+
+    if (initialCustomInput) {
+        initialCustomInput.addEventListener("input", () => handleCustomDropInput(0));
+    }
+
+    updateStopLabels();
+}
+
+// Populates drop options for a specific select element
+function renderDropOptionsForSelect(selectEl) {
+    if (!selectEl) return;
+    const currentVal = selectEl.value;
+    const pickupVal = pickupSelect ? pickupSelect.value : "";
+
+    selectEl.innerHTML = `<option value="" disabled ${!currentVal ? "selected" : ""}>Select Destination</option>`;
+    selectEl.disabled = !pickupVal;
+    
+    if (pickupVal) {
+        selectEl.className = "drop-stop-select w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-4 py-3.5 rounded-xl outline-none transition-all duration-300 font-medium text-sm appearance-none";
+    } else {
+        selectEl.className = "drop-stop-select w-full bg-slate-950/40 border border-slate-800 text-slate-500 px-4 py-3.5 rounded-xl outline-none transition-all duration-300 font-medium text-sm appearance-none";
+    }
+
+    // Add Custom Location choice
+    const customOpt = document.createElement("option");
+    customOpt.value = "Custom Location";
+    customOpt.textContent = "Custom Location";
+    if (currentVal === "Custom Location") customOpt.selected = true;
+    selectEl.appendChild(customOpt);
+
+    let drops = [];
+    if (pickupVal === "Custom Location") {
+        drops = dbLocations.filter(loc => loc.type === "drop" || loc.type === "both");
+    } else {
+        drops = dbLocations.filter(loc => (loc.type === "drop" || loc.type === "both") && loc.name !== pickupVal);
+    }
+
+    drops.forEach(dest => {
+        const opt = document.createElement("option");
+        opt.value = dest.name;
+        opt.textContent = dest.name;
+        if (dest.name === currentVal) opt.selected = true;
+        selectEl.appendChild(opt);
+    });
+}
+
+// Populates options across all active drop stops
+function populateAllDropStops() {
+    dropStops.forEach(stop => {
+        renderDropOptionsForSelect(stop.selectEl);
+    });
+}
+
+// Adds a new intermediate stopover or final drop (up to 5 total)
+function handleAddDropStop() {
+    if (dropStops.length >= 5) {
+        utils.showAlert(bookingAlert, "Maximum of 5 drop stops are supported per booking.");
+        return;
+    }
+
+    const newId = Date.now();
+    const newIndex = dropStops.length;
+
+    const rowDiv = document.createElement("div");
+    rowDiv.className = "drop-stop-row bg-slate-950/40 p-4 rounded-2xl border border-slate-800 space-y-2 relative transition-all";
+    rowDiv.dataset.id = newId;
+
+    rowDiv.innerHTML = `
+        <div class="flex items-center justify-between">
+            <span class="stop-label text-[10px] font-bold text-amber-500 uppercase tracking-wider"></span>
+            <button type="button" class="btn-remove-stop text-slate-400 hover:text-rose-400 p-1 text-xs font-bold transition-colors flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                <span>Remove</span>
+            </button>
+        </div>
+        <select class="drop-stop-select w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-4 py-3.5 rounded-xl outline-none transition-all duration-300 font-medium text-sm appearance-none">
+        </select>
+        <div class="custom-drop-container hidden mt-2">
+            <label class="block text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1">Enter Custom Drop Address</label>
+            <input type="text" placeholder="E.g. Gate 3, City Center II, Rajarhat" class="custom-drop-input w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-4 py-2.5 rounded-xl outline-none transition-all duration-300 text-xs font-medium">
+        </div>
+    `;
+
+    dropStopsList.appendChild(rowDiv);
+
+    const selectEl = rowDiv.querySelector(".drop-stop-select");
+    const customContainerEl = rowDiv.querySelector(".custom-drop-container");
+    const customInputEl = rowDiv.querySelector(".custom-drop-input");
+    const btnRemove = rowDiv.querySelector(".btn-remove-stop");
+
+    renderDropOptionsForSelect(selectEl);
+
+    const stopObj = {
+        id: newId,
+        rowEl: rowDiv,
+        selectEl,
+        customContainerEl,
+        customInputEl,
+        customCoords: null,
+        customTimer: null
+    };
+
+    selectEl.addEventListener("change", () => handleDropChange(newId));
+    customInputEl.addEventListener("input", () => handleCustomDropInput(newId));
+    btnRemove.addEventListener("click", () => handleRemoveDropStop(newId));
+
+    dropStops.push(stopObj);
+
+    updateStopLabels();
+    toggleCustomAddressFields();
+    toggleMapVisibility();
+    syncRideCategoryWithDestination();
+}
+
+// Removes a drop stop row
+function handleRemoveDropStop(id) {
+    if (dropStops.length <= 1) return; // Keep at least 1 stop
+    
+    const index = dropStops.findIndex(s => s.id === id);
+    if (index === -1) return;
+
+    const stopObj = dropStops[index];
+    if (stopObj.rowEl && stopObj.rowEl.parentElement) {
+        stopObj.rowEl.remove();
+    }
+
+    dropStops.splice(index, 1);
+
+    updateStopLabels();
+    toggleCustomAddressFields();
+    toggleMapVisibility();
+    syncRideCategoryWithDestination();
+}
+
+// Re-indexes and numbers stop labels (Stop 1, Stop 2... Final Destination)
+function updateStopLabels() {
+    const total = dropStops.length;
+    dropStops.forEach((stop, idx) => {
+        const labelEl = stop.rowEl.querySelector(".stop-label");
+        const btnRemove = stop.rowEl.querySelector(".btn-remove-stop");
+
+        if (labelEl) {
+            if (total === 1) {
+                labelEl.textContent = "📍 Stop 1 (Destination)";
+            } else if (idx === total - 1) {
+                labelEl.textContent = `📍 Stop ${idx + 1} (Final Destination)`;
+            } else {
+                labelEl.textContent = `📍 Stop ${idx + 1} (Via Point)`;
+            }
+        }
+
+        if (btnRemove) {
+            if (total > 1) {
+                btnRemove.classList.remove("hidden");
+            } else {
+                btnRemove.classList.add("hidden");
+            }
+        }
+    });
+
+    if (stopCounterBadge) {
+        stopCounterBadge.textContent = `${total} of 5 Stops`;
+    }
+
+    if (btnAddStop) {
+        if (total >= 5) {
+            btnAddStop.classList.add("opacity-50", "pointer-events-none");
+        } else {
+            btnAddStop.classList.remove("opacity-50", "pointer-events-none");
+        }
+    }
+}
+
+// Resolves current data of all stops
+function getDropStopsData() {
+    return dropStops.map((stop, idx) => {
+        const val = stop.selectEl ? stop.selectEl.value : "";
+        const isCustom = val === "Custom Location";
+        const customText = (isCustom && stop.customInputEl) ? stop.customInputEl.value.trim() : "";
+        let coords = null;
+        if (isCustom) {
+            coords = stop.customCoords;
+        } else if (val) {
+            const loc = dbLocations.find(l => l.name === val);
+            if (loc) coords = [loc.lat, loc.lng];
+        }
+        return {
+            id: stop.id,
+            index: idx,
+            value: val,
+            isCustom,
+            customText,
+            name: isCustom ? customText : val,
+            coords
+        };
+    });
+}
+
 // Repopulates Dropdown options based on active Pickup choice
 function handlePickupChange() {
     utils.hideElement(bookingAlert);
@@ -333,46 +562,44 @@ function handlePickupChange() {
         customPickupCoords = null;
     }
 
-    // Clear and enable drop dropdown
-    dropSelect.innerHTML = `<option value="" disabled selected>Select Destination</option>`;
-    dropSelect.disabled = false;
-    dropSelect.className = "w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-4 py-4 rounded-2xl outline-none transition-all duration-300 font-medium appearance-none";
-
-    // Add Custom Location choice
-    const customOpt = document.createElement("option");
-    customOpt.value = "Custom Location";
-    customOpt.textContent = "Custom Location";
-    dropSelect.appendChild(customOpt);
-
-    let drops = [];
-    if (pickupVal === "Custom Location") {
-        drops = dbLocations.filter(loc => loc.type === "drop" || loc.type === "both");
-    } else {
-        drops = dbLocations.filter(loc => (loc.type === "drop" || loc.type === "both") && loc.name !== pickupVal);
-    }
-    drops.forEach(dest => {
-        const opt = document.createElement("option");
-        opt.value = dest.name;
-        opt.textContent = dest.name;
-        dropSelect.appendChild(opt);
-    });
-
+    populateAllDropStops();
     toggleCustomAddressFields();
     toggleMapVisibility();
     syncRideCategoryWithDestination();
 }
 
-function handleDropChange() {
+function handleDropChange(stopId) {
     utils.hideElement(bookingAlert);
-    if (dropSelect.value !== "Custom Location") {
-        customDropCoords = null;
+    const stopObj = dropStops.find(s => s.id === stopId);
+    if (stopObj && stopObj.selectEl.value !== "Custom Location") {
+        stopObj.customCoords = null;
     }
     toggleCustomAddressFields();
     toggleMapVisibility();
     syncRideCategoryWithDestination();
 }
 
-// Dynamically classifies the destination and shows only the matching category
+function handleCustomDropInput(stopId) {
+    const stopObj = dropStops.find(s => s.id === stopId);
+    if (!stopObj || !stopObj.customInputEl) return;
+
+    clearTimeout(stopObj.customTimer);
+    stopObj.customTimer = setTimeout(async () => {
+        const address = stopObj.customInputEl.value.trim();
+        if (address.length > 3) {
+            console.log(`[Geocoding] Searching stop ${stopId} drop address:`, address);
+            const coords = await geocodeAddress(address);
+            if (coords) {
+                stopObj.customCoords = coords;
+                console.log(`[Geocoding] Stop ${stopId} resolved to:`, coords);
+                initOrUpdateMap();
+            }
+            syncRideCategoryWithDestination();
+        }
+    }, 800);
+}
+
+// Dynamically classifies the destination across all stops and shows only the matching category
 function syncRideCategoryWithDestination() {
     const tripType = document.querySelector('input[name="trip-type"]:checked')?.value || "one_way";
     if (tripType === "round_trip") {
@@ -390,27 +617,29 @@ function syncRideCategoryWithDestination() {
     // Trip type is one_way:
     utils.hideElement(catRentalContainer);
     
-    const dropVal = dropSelect.value;
-    if (!dropVal) {
-        // No drop selected yet - restore all 3 one-way categories
+    const stopsData = getDropStopsData();
+    const activeStops = stopsData.filter(s => !!s.value);
+    if (activeStops.length === 0) {
+        // No drops selected yet - restore all 3 one-way categories
         utils.showElement(catLocalContainer);
         utils.showElement(catIntercityContainer);
         utils.showElement(catOutstationContainer);
         return;
     }
 
-    let dropCoords = null;
-    let customText = "";
-    if (dropVal === "Custom Location") {
-        dropCoords = customDropCoords;
-        customText = customDropAddress ? customDropAddress.value.trim() : "";
-    } else {
-        const dropLoc = dbLocations.find(l => l.name === dropVal);
-        if (dropLoc) dropCoords = [dropLoc.lat, dropLoc.lng];
+    // Evaluate categories across all selected stops (outstation > intercity > local)
+    let highestCategory = "local";
+    for (const stop of activeStops) {
+        const cat = classifyDestination(stop.value, stop.coords, stop.customText);
+        if (cat === "outstation") {
+            highestCategory = "outstation";
+            break;
+        } else if (cat === "intercity" && highestCategory !== "outstation") {
+            highestCategory = "intercity";
+        }
     }
 
-    const determinedCategory = classifyDestination(dropVal, dropCoords, customText);
-    console.log("[CategorySync] Destination:", dropVal, "Coords:", dropCoords, "Determined Category:", determinedCategory);
+    console.log("[CategorySync] Multi-stop Determined Category:", highestCategory);
 
     // Hide all 3 categories first
     utils.hideElement(catLocalContainer);
@@ -418,9 +647,9 @@ function syncRideCategoryWithDestination() {
     utils.hideElement(catOutstationContainer);
 
     // Show only the determined category
-    if (determinedCategory === "outstation") {
+    if (highestCategory === "outstation") {
         utils.showElement(catOutstationContainer);
-    } else if (determinedCategory === "intercity") {
+    } else if (highestCategory === "intercity") {
         utils.showElement(catIntercityContainer);
     } else {
         utils.showElement(catLocalContainer);
@@ -428,15 +657,14 @@ function syncRideCategoryWithDestination() {
 
     // Set checked state explicitly on the radio inputs
     document.querySelectorAll('input[name="ride-category"]').forEach(r => {
-        r.checked = (r.value === determinedCategory);
+        r.checked = (r.value === highestCategory);
     });
 
-    handleCategoryChange({ target: { value: determinedCategory } });
+    handleCategoryChange({ target: { value: highestCategory } });
 }
 
 function toggleCustomAddressFields() {
     const isPickupCustom = pickupSelect.value === "Custom Location";
-    const isDropCustom = dropSelect.value === "Custom Location";
     const category = document.querySelector('input[name="ride-category"]:checked')?.value || "local";
 
     if (isPickupCustom) {
@@ -448,23 +676,29 @@ function toggleCustomAddressFields() {
         customPickupAddress.value = "";
     }
 
-    if (isDropCustom && category !== "rental") {
-        utils.showElement(customDropContainer);
-        customDropAddress.required = true;
-    } else {
-        utils.hideElement(customDropContainer);
-        customDropAddress.required = false;
-        customDropAddress.value = "";
-    }
+    dropStops.forEach(stop => {
+        const isCustom = stop.selectEl && stop.selectEl.value === "Custom Location";
+        if (isCustom && category !== "rental") {
+            utils.showElement(stop.customContainerEl);
+            if (stop.customInputEl) stop.customInputEl.required = true;
+        } else {
+            utils.hideElement(stop.customContainerEl);
+            if (stop.customInputEl) {
+                stop.customInputEl.required = false;
+                if (category === "rental") stop.customInputEl.value = "";
+            }
+        }
+    });
 }
 
 function toggleMapVisibility() {
     const pickupVal = pickupSelect.value;
-    const dropVal = dropSelect.value;
     const category = document.querySelector('input[name="ride-category"]:checked')?.value || "local";
+    const stopsData = getDropStopsData();
+    const hasAnyDrop = stopsData.some(s => !!s.value);
 
     const hasPickup = !!pickupVal;
-    const hasDrop = (category === "rental" || !!dropVal);
+    const hasDrop = (category === "rental" || hasAnyDrop);
 
     if (hasPickup && hasDrop) {
         utils.showElement(bookingMapWrapper);
@@ -478,7 +712,6 @@ function initOrUpdateMap() {
     const kolkataCenter = [22.5726, 88.3639];
 
     if (!mapInstance) {
-        // Initialize Leaflet map as interactive preview
         mapInstance = L.map('booking-map', {
             dragging: true,
             touchZoom: true,
@@ -489,7 +722,6 @@ function initOrUpdateMap() {
             zoomControl: true
         }).setView(kolkataCenter, 12);
         
-        // Add OpenStreetMap Standard tiles
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
             maxZoom: 19
@@ -497,10 +729,9 @@ function initOrUpdateMap() {
     }
 
     const pickupVal = pickupSelect.value;
-    const dropVal = dropSelect.value;
     const category = document.querySelector('input[name="ride-category"]:checked')?.value || "local";
 
-    // Resolve coordinates (predefined vs custom)
+    // Resolve Pickup coordinates
     if (pickupVal === "Custom Location") {
         mapPickupCoords = customPickupCoords;
         mapPickupAddress = customPickupAddress.value.trim() || "Custom Location";
@@ -508,15 +739,6 @@ function initOrUpdateMap() {
         const pickupLoc = dbLocations.find(l => l.name === pickupVal);
         mapPickupCoords = pickupLoc ? [pickupLoc.lat, pickupLoc.lng] : null;
         mapPickupAddress = pickupVal || "";
-    }
-
-    if (dropVal === "Custom Location") {
-        mapDropCoords = (category !== "rental") ? customDropCoords : null;
-        mapDropAddress = customDropAddress.value.trim() || "Custom Location";
-    } else {
-        const dropLoc = dbLocations.find(l => l.name === dropVal);
-        mapDropCoords = (category !== "rental" && dropLoc) ? [dropLoc.lat, dropLoc.lng] : null;
-        mapDropAddress = dropVal || "";
     }
 
     // Draw/update Pickup Marker
@@ -528,7 +750,7 @@ function initOrUpdateMap() {
                 title: "Pickup Location"
             }).addTo(mapInstance);
         }
-        updateMarkerPopup(pickupMarker, "Pickup: " + mapPickupAddress);
+        updateMarkerPopup(pickupMarker, "🚩 Pickup: " + mapPickupAddress);
     } else {
         if (pickupMarker) {
             mapInstance.removeLayer(pickupMarker);
@@ -536,26 +758,43 @@ function initOrUpdateMap() {
         }
     }
 
-    // Draw/update Drop Marker
-    if (mapDropCoords) {
-        if (dropMarker) {
-            dropMarker.setLatLng(mapDropCoords);
-        } else {
-            dropMarker = L.marker(mapDropCoords, {
-                title: "Drop Location"
-            }).addTo(mapInstance);
-        }
-        updateMarkerPopup(dropMarker, "Drop: " + mapDropAddress);
-    } else {
-        if (dropMarker) {
-            mapInstance.removeLayer(dropMarker);
-            dropMarker = null;
-        }
+    // Clear existing drop stop markers
+    mapStopMarkers.forEach(m => mapInstance.removeLayer(m));
+    mapStopMarkers = [];
+
+    // Gather waypoints
+    const waypoints = [];
+    const markerGroup = [];
+    if (mapPickupCoords) {
+        waypoints.push(mapPickupCoords);
+        if (pickupMarker) markerGroup.push(pickupMarker);
     }
 
-    // Draw/update polyline if both are present
-    if (mapPickupCoords && mapDropCoords) {
-        fetchOSRMRoute(mapPickupCoords, mapDropCoords).then(routeData => {
+    if (category !== "rental") {
+        const stopsData = getDropStopsData();
+        const totalStops = stopsData.length;
+
+        stopsData.forEach((stop, idx) => {
+            if (stop.coords) {
+                waypoints.push(stop.coords);
+                const isFinal = (idx === totalStops - 1);
+                const labelText = isFinal 
+                    ? `🏁 Destination: ${stop.name || 'Drop'}` 
+                    : `📍 Stop ${idx + 1}: ${stop.name || 'Via'}`;
+
+                const marker = L.marker(stop.coords, {
+                    title: labelText
+                }).addTo(mapInstance);
+                updateMarkerPopup(marker, labelText);
+                mapStopMarkers.push(marker);
+                markerGroup.push(marker);
+            }
+        });
+    }
+
+    // Draw/update multi-waypoint polyline if at least 2 waypoints
+    if (waypoints.length >= 2) {
+        fetchOSRMRoute(waypoints).then(routeData => {
             const coords = routeData.geometry.coordinates;
             const polylinePoints = coords.map(coord => [coord[1], coord[0]]);
             
@@ -564,17 +803,21 @@ function initOrUpdateMap() {
             }
             window.bookingPolyline = L.polyline(polylinePoints, { color: '#f59e0b', weight: 4, opacity: 0.8 }).addTo(mapInstance);
             
-            const group = new L.featureGroup([pickupMarker, dropMarker]);
-            mapInstance.fitBounds(group.getBounds().pad(0.15));
+            if (markerGroup.length > 0) {
+                const group = new L.featureGroup(markerGroup);
+                mapInstance.fitBounds(group.getBounds().pad(0.15));
+            }
         }).catch(err => {
-            console.warn("OSRM route fetch failed for preview:", err);
+            console.warn("OSRM multi-waypoint route fetch failed for preview:", err);
             // Draw straight line fallback
             if (window.bookingPolyline) {
                 mapInstance.removeLayer(window.bookingPolyline);
             }
-            window.bookingPolyline = L.polyline([mapPickupCoords, mapDropCoords], { color: '#f59e0b', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(mapInstance);
-            const group = new L.featureGroup([pickupMarker, dropMarker]);
-            mapInstance.fitBounds(group.getBounds().pad(0.15));
+            window.bookingPolyline = L.polyline(waypoints, { color: '#f59e0b', weight: 3, opacity: 0.8, dashArray: '5, 5' }).addTo(mapInstance);
+            if (markerGroup.length > 0) {
+                const group = new L.featureGroup(markerGroup);
+                mapInstance.fitBounds(group.getBounds().pad(0.15));
+            }
         });
     } else {
         if (window.bookingPolyline) {
@@ -619,7 +862,7 @@ async function geocodeAddress(address) {
 }
 
 function setupCustomAddressGeocoding() {
-    if (!customPickupAddress || !customDropAddress) return;
+    if (!customPickupAddress) return;
 
     customPickupAddress.addEventListener("input", () => {
         clearTimeout(customPickupTimer);
@@ -636,32 +879,16 @@ function setupCustomAddressGeocoding() {
             }
         }, 800);
     });
-
-    customDropAddress.addEventListener("input", () => {
-        clearTimeout(customDropTimer);
-        customDropTimer = setTimeout(async () => {
-            const address = customDropAddress.value.trim();
-            if (address.length > 3) {
-                console.log("[Geocoding] Searching custom drop:", address);
-                const coords = await geocodeAddress(address);
-                if (coords) {
-                    customDropCoords = coords;
-                    console.log("[Geocoding] Custom drop resolved to:", customDropCoords);
-                    initOrUpdateMap();
-                }
-                syncRideCategoryWithDestination();
-            }
-        }, 800);
-    });
 }
 
-async function fetchOSRMRoute(pickupCoords, dropCoords) {
-    const pickupLng = pickupCoords[1];
-    const pickupLat = pickupCoords[0];
-    const dropLng = dropCoords[1];
-    const dropLat = dropCoords[0];
-
-    const url = `https://router.project-osrm.org/route/v1/driving/${pickupLng},${pickupLat};${dropLng},${dropLat}?overview=full&geometries=geojson`;
+// Multi-waypoint OSRM router
+async function fetchOSRMRoute(waypoints) {
+    if (!waypoints || waypoints.length < 2) {
+        throw new Error("At least 2 waypoints required for OSRM routing");
+    }
+    // OSRM expects coordinates in lng,lat format joined by semicolons
+    const coordsString = waypoints.map(pt => `${pt[1]},${pt[0]}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=full&geometries=geojson`;
     const response = await fetch(url);
     if (!response.ok) {
         throw new Error("Failed to fetch route from OSRM");
@@ -684,13 +911,22 @@ function getHaversineDistance(coords1, coords2) {
     return Math.ceil(R * c * 1.3); // Apply 30% routing overhead to approximate actual driving distance
 }
 
+function getHaversineRouteDistance(waypoints) {
+    if (!waypoints || waypoints.length < 2) return 0;
+    let total = 0;
+    for (let i = 0; i < waypoints.length - 1; i++) {
+        total += getHaversineDistance(waypoints[i], waypoints[i+1]);
+    }
+    return Math.ceil(total);
+}
+
 function handleTripTypeChange(e) {
     const tripType = e.target.value;
     console.log("[UAT-TripType] Selected Trip Type:", tripType);
     syncRideCategoryWithDestination();
 }
 
-// Shows/Hides rental hours and toggles drop select visibility
+// Shows/Hides rental hours and toggles drop stops visibility
 function handleCategoryChange(e) {
     utils.hideElement(bookingAlert);
     const category = e.target.value;
@@ -700,19 +936,24 @@ function handleCategoryChange(e) {
         utils.showElement(rentalHoursContainer);
         rentalHoursSelect.required = true;
         
-        utils.hideElement(dropSelect.parentElement);
-        dropSelect.required = false;
-        dropSelect.value = "";
+        if (dropStopsWrapper) utils.hideElement(dropStopsWrapper);
+        dropStops.forEach(stop => {
+            if (stop.selectEl) {
+                stop.selectEl.required = false;
+                stop.selectEl.value = "";
+            }
+        });
     } else {
         utils.hideElement(rentalHoursContainer);
         rentalHoursSelect.required = false;
         
-        utils.showElement(dropSelect.parentElement);
-        if (pickupSelect.value) {
-            dropSelect.required = true;
+        if (dropStopsWrapper) utils.showElement(dropStopsWrapper);
+        if (dropStops[0] && dropStops[0].selectEl && pickupSelect.value) {
+            dropStops[0].selectEl.required = true;
         }
     }
 
+    toggleCustomAddressFields();
     toggleMapVisibility();
 }
 
@@ -787,7 +1028,6 @@ async function handleStep1Submit(e) {
     utils.hideElement(bookingAlert);
 
     const pickup = pickupSelect.value;
-    const drop = dropSelect.value;
     const dateVal = pickupDate.value;
     const timeVal = pickupTime.value;
     const category = document.querySelector('input[name="ride-category"]:checked').value;
@@ -805,14 +1045,12 @@ async function handleStep1Submit(e) {
         return;
     }
 
-    // Resolve coordinates and names
+    // Resolve Pickup coordinates and name
     let pickupCoords = null;
-    let dropCoords = null;
     let resolvedPickupName = pickup;
-    let resolvedDropName = drop;
-    const isCustomBooking = (pickup === "Custom Location") || (category !== "rental" && drop === "Custom Location");
+    const isPickupCustom = (pickup === "Custom Location");
 
-    if (pickup === "Custom Location") {
+    if (isPickupCustom) {
         const customText = customPickupAddress.value.trim();
         if (!customText) {
             utils.showAlert(bookingAlert, "Please type a custom pickup address.");
@@ -831,64 +1069,93 @@ async function handleStep1Submit(e) {
         }
     }
 
+    // Resolve all drop stops
+    const stopsData = getDropStopsData();
+    let resolvedDropNames = [];
+    let dropWaypoints = [];
+    let isAnyDropCustom = false;
+
     if (category === "rental") {
-        resolvedDropName = "Rental Service (No Drop)";
+        resolvedDropNames = ["Rental Service (No Drop)"];
     } else {
-        if (drop === "Custom Location") {
-            const customText = customDropAddress.value.trim();
-            if (!customText) {
-                utils.showAlert(bookingAlert, "Please type a custom drop address.");
+        if (stopsData.length === 0 || !stopsData[0].value) {
+            utils.showAlert(bookingAlert, "Please select at least one destination/drop location.");
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            return;
+        }
+
+        for (let i = 0; i < stopsData.length; i++) {
+            const stop = stopsData[i];
+            if (!stop.value) {
+                utils.showAlert(bookingAlert, `Please select a destination for Stop ${i + 1}.`);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 return;
             }
-            resolvedDropName = customText;
-            dropCoords = customDropCoords || await geocodeAddress(customText);
-            if (dropCoords) {
-                customDropCoords = dropCoords;
-            }
-        } else {
-            const dropLoc = dbLocations.find(l => l.name === drop);
-            if (dropLoc) {
-                dropCoords = [dropLoc.lat, dropLoc.lng];
+
+            if (stop.isCustom) {
+                isAnyDropCustom = true;
+                if (!stop.customText) {
+                    utils.showAlert(bookingAlert, `Please type an address for custom Stop ${i + 1}.`);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    return;
+                }
+                const resolvedCoords = stop.coords || await geocodeAddress(stop.customText);
+                if (resolvedCoords) {
+                    const stopObj = dropStops.find(s => s.id === stop.id);
+                    if (stopObj) stopObj.customCoords = resolvedCoords;
+                    dropWaypoints.push(resolvedCoords);
+                }
+                resolvedDropNames.push(stop.customText);
+            } else {
+                if (stop.coords) {
+                    dropWaypoints.push(stop.coords);
+                }
+                resolvedDropNames.push(stop.value);
             }
         }
     }
+
+    const isCustomBooking = isPickupCustom || isAnyDropCustom;
+    const isMultiHop = resolvedDropNames.length > 1;
 
     showLoader("Querying fleet inventory & calculating rates...");
 
     let distanceKm = 0;
     let polyline = null;
+    const allWaypoints = [];
+    if (pickupCoords) allWaypoints.push(pickupCoords);
+    allWaypoints.push(...dropWaypoints);
 
     if (category === "rental") {
         distanceKm = 0;
         polyline = null;
     } else {
-        if (pickupCoords && dropCoords) {
+        if (allWaypoints.length >= 2) {
             try {
-                // Query OSRM
-                const routeData = await fetchOSRMRoute(pickupCoords, dropCoords);
+                // Query OSRM multi-waypoint route
+                const routeData = await fetchOSRMRoute(allWaypoints);
                 distanceKm = Math.round(routeData.distance / 1000) || 1;
                 const coords = routeData.geometry.coordinates; // array of [lng, lat]
                 polyline = coords.map(coord => [coord[1], coord[0]]); // convert to [lat, lng]
             } catch (err) {
                 console.warn("Routing API failed, using fallback metrics:", err.message);
-                
-                // Fallback to Haversine distance
-                distanceKm = getHaversineDistance(pickupCoords, dropCoords);
-                polyline = [pickupCoords, dropCoords]; // Straight-line polyline fallback
+                // Fallback to Haversine distance sum
+                distanceKm = getHaversineRouteDistance(allWaypoints);
+                polyline = allWaypoints; // Straight-line polyline fallback
             }
         }
     }
 
-    // Check if flat metrics are applicable (only if BOTH are NOT custom and we have a matrix match in Firestore)
+    // Check if flat metrics are applicable (only if SINGLE drop, NOT custom, and flat fare match exists in DB)
     let metrics = null;
-    if (category !== "rental" && !isCustomBooking) {
+    if (category !== "rental" && !isCustomBooking && !isMultiHop) {
+        const primaryDrop = stopsData[0]?.value;
         try {
             const response = await fetch(`${API_BASE}/flat-fares`);
             if (response.ok) {
                 const flatFares = await response.json();
                 const matched = flatFares.find(
-                    f => f.pickup_name === pickup && f.drop_name === drop
+                    f => f.pickup_name === pickup && f.drop_name === primaryDrop
                 );
                 if (matched) {
                     metrics = {
@@ -902,16 +1169,18 @@ async function handleStep1Submit(e) {
             }
         } catch (err) {
             console.warn("Flat fares query failed, falling back to static/dynamic calculation:", err);
-            // Fallback check static routesMatrix
-            metrics = getRouteMetrics(pickup, drop);
+            metrics = getRouteMetrics(pickup, primaryDrop);
         }
     }
 
     // Save configuration parameters globally
     const tripTypeVal = document.querySelector('input[name="trip-type"]:checked').value;
+    const finalDropName = resolvedDropNames[resolvedDropNames.length - 1] || "";
+    
     currentRouteData = {
         pickup: resolvedPickupName,
-        drop: resolvedDropName,
+        drop: finalDropName,
+        drop_locations: resolvedDropNames,
         dateString: dateVal,
         timeString: timeVal,
         category: category,
@@ -921,20 +1190,23 @@ async function handleStep1Submit(e) {
         km: category === "rental" ? 0 : (metrics ? metrics.km : distanceKm),
         flatMetrics: metrics,
         pickupCoords: pickupCoords,
-        dropCoords: dropCoords,
+        dropCoords: dropWaypoints[dropWaypoints.length - 1] || null,
+        waypoints: allWaypoints,
         polyline: polyline,
-        isCustomBooking: isCustomBooking
+        isCustomBooking: isCustomBooking,
+        isMultiHop: isMultiHop
     };
 
     // Update Step 2 badge distance total
-    if (isCustomBooking) {
+    if (isMultiHop) {
+        routeKmBadge.textContent = `Estimated: ${currentRouteData.km} km (${resolvedDropNames.length} Stops)`;
+    } else if (isCustomBooking) {
         routeKmBadge.textContent = `Estimated: ${currentRouteData.km} km (Custom Route)`;
     } else {
         routeKmBadge.textContent = `Estimated: ${currentRouteData.km} km`;
     }
 
-    console.log("[UAT-1] Distance Calculation Results -> Category:", category, "Resolved KM:", currentRouteData.km);
-    console.log("[UAT-1] Coordinates -> Pickup:", pickupCoords, "Drop:", dropCoords);
+    console.log("[UAT-1] Distance Calculation Results -> Category:", category, "Resolved KM:", currentRouteData.km, "Stops:", resolvedDropNames);
 
     // Validation for route distance on point-to-point rides
     if (category !== "rental" && (!currentRouteData.km || currentRouteData.km <= 0)) {
@@ -1291,7 +1563,23 @@ async function navigateToStep3() {
 
     // Populate billing values
     summaryPickup.textContent = currentRouteData.pickup;
-    summaryDrop.textContent = currentRouteData.drop;
+    
+    if (currentRouteData.drop_locations && currentRouteData.drop_locations.length > 1) {
+        const totalStops = currentRouteData.drop_locations.length;
+        summaryDrop.innerHTML = `
+            <div class="space-y-1 text-right">
+                ${currentRouteData.drop_locations.map((loc, idx) => `
+                    <div class="flex items-center justify-end gap-1.5 text-xs">
+                        <span class="text-amber-500 font-bold">${idx === totalStops - 1 ? '🏁 Drop:' : `📍 Stop ${idx + 1}:`}</span>
+                        <span class="font-bold text-white">${loc}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    } else {
+        summaryDrop.textContent = currentRouteData.drop;
+    }
+
     summaryDatetime.textContent = `${currentRouteData.dateString} at ${currentRouteData.timeString}`;
     const tripTypeLabel = currentRouteData.tripType === "round_trip" ? "Round-Trip" : "One-Way";
     summaryCategory.textContent = `${currentRouteData.category.toUpperCase()} (${tripTypeLabel})`;
@@ -1413,7 +1701,6 @@ async function handleApplyPromo() {
 }
 
 // Final execution loop (saves to Firestore, then opens WhatsApp redirect window)
-// Final execution loop (saves to Firestore, then opens WhatsApp redirect window)
 async function handleFinalConfirm() {
     if (!currentUser || !currentProfile) {
         utils.showAlert(bookingAlert, "Your session has expired. Please reload and log in again.");
@@ -1428,6 +1715,7 @@ async function handleFinalConfirm() {
             category: currentRouteData.category,
             pickup: currentRouteData.pickup,
             drop: currentRouteData.drop,
+            drop_locations: currentRouteData.drop_locations,
             date_string: currentRouteData.dateString,
             time_string: currentRouteData.timeString,
             days: (currentRouteData.category === "outstation" || currentRouteData.category === "intercity") ? currentRouteData.days : null,
@@ -1444,6 +1732,7 @@ async function handleFinalConfirm() {
                 trip_type: currentRouteData.tripType,
                 pickup_location: currentRouteData.pickup,
                 drop_location: currentRouteData.drop,
+                drop_locations: currentRouteData.drop_locations || [currentRouteData.drop],
                 pickup_date: currentRouteData.dateString,
                 pickup_time: currentRouteData.timeString,
                 outstation_days: (currentRouteData.category === "outstation" || currentRouteData.category === "intercity") ? currentRouteData.days : null,

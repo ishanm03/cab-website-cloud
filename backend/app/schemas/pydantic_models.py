@@ -129,6 +129,14 @@ class QuoteEstimateRequest(BaseModel):
     km: float
     vehicle_tier: str
     promo_code: Optional[str] = None
+    drop_locations: Optional[List[str]] = None
+
+    @field_validator("drop_locations")
+    @classmethod
+    def validate_drop_locations(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is not None and len(v) > 5:
+            raise ValueError("Maximum 5 drop locations are supported")
+        return v
 
 class QuoteEstimateResponse(BaseModel):
     quote_id: str

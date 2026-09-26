@@ -107,16 +107,36 @@
                         </div>
                     </div>
 
-                    <!-- Drop Select -->
-                    <div>
-                        <label for="drop-select" class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Destination / Drop Location</label>
-                        <select id="drop-select" required disabled class="w-full bg-slate-950/40 border border-slate-800 text-slate-500 px-4 py-4 rounded-2xl outline-none transition-all duration-300 font-medium appearance-none">
-                            <option value="" disabled selected>Select pickup first</option>
-                        </select>
-                        <!-- Custom Drop Text Input -->
-                        <div id="custom-drop-container" class="hidden mt-3">
-                            <label for="custom-drop-address" class="block text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1">Enter Custom Drop Address</label>
-                            <input type="text" id="custom-drop-address" placeholder="E.g. Gate 3, City Center II, Rajarhat" class="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-4 py-3 rounded-xl outline-none transition-all duration-300 text-xs font-medium">
+                    <!-- Dynamic Drop Stops Container -->
+                    <div id="drop-stops-wrapper" class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400">Destination / Drop Location(s)</label>
+                            <span id="stop-counter-badge" class="text-[10px] text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">1 of 5 Stops</span>
+                        </div>
+                        
+                        <div id="drop-stops-list" class="space-y-3">
+                            <!-- Stop 1 (Primary Destination) -->
+                            <div class="drop-stop-row bg-slate-950/40 p-4 rounded-2xl border border-slate-800 space-y-2 relative transition-all" data-index="0">
+                                <div class="flex items-center justify-between">
+                                    <span class="stop-label text-[10px] font-bold text-amber-500 uppercase tracking-wider">📍 Stop 1 (Destination)</span>
+                                </div>
+                                <select id="drop-select" required disabled class="drop-stop-select w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-slate-500 px-4 py-3.5 rounded-xl outline-none transition-all duration-300 font-medium text-sm appearance-none">
+                                    <option value="" disabled selected>Select pickup first</option>
+                                </select>
+                                <!-- Custom Drop Text Input -->
+                                <div id="custom-drop-container" class="custom-drop-container hidden mt-2">
+                                    <label for="custom-drop-address" class="block text-[10px] font-bold uppercase tracking-wider text-amber-500 mb-1">Enter Custom Drop Address</label>
+                                    <input type="text" id="custom-drop-address" placeholder="E.g. Gate 3, City Center II, Rajarhat" class="custom-drop-input w-full bg-slate-950 border border-slate-800 focus:border-amber-500 text-white px-4 py-3 rounded-xl outline-none transition-all duration-300 text-xs font-medium">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Add Stop Button (Capped at 5 total) -->
+                        <div class="flex justify-start pt-1">
+                            <button type="button" id="btn-add-stop" class="text-xs font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1.5 py-2 px-3.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition-all">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                                <span>Add Stopover / Via Point</span>
+                            </button>
                         </div>
                     </div>
 
@@ -495,6 +515,6 @@
     </footer>
 
     <!-- Scripts Module Loader -->
-    <script type="module" src="bookingUI.js?v=20260906_1340"></script>
+    <script type="module" src="bookingUI.js?v=20260906_1430"></script>
 </body>
 </html>
