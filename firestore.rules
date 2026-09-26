@@ -28,10 +28,10 @@ service cloud.firestore {
       allow write: if false; 
     }
 
-    // User Profiles: Users read own profile; Admins can read all profiles
+    // User Profiles: Users read and write own profile; Admins can read all profiles
     match /users/{userId} {
       allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-      allow write: if false; // ALL WRITES VIA FASTAPI BACKEND
+      allow write: if request.auth != null && (request.auth.uid == userId || isAdmin());
     }
 
     // Bookings: Customers read own rides; Admins read all rides

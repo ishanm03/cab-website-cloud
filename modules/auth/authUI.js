@@ -240,10 +240,31 @@ async function handleAuthStateChange(user) {
             }
 
             console.log("[Auth Debug] User is NOT admin. Fetching rider profile for UID:", user.uid);
-            const profile = await dbService.getUserProfile(user.uid);
+            let profile = await dbService.getUserProfile(user.uid);
             console.log("[Auth Debug] Rider profile retrieved from DB:", profile);
-            if (profile && profile.name && profile.city && profile.phone) {
-                console.log("[Auth Debug] Rider profile complete. Scheduling redirect to index.html in 1.2s...");
+
+            // Auto-provision profile from Google / Firebase Auth credentials if not in DB yet
+            if (!profile && user) {
+                console.log("[Auth Debug] Initializing rider profile from Auth credentials...");
+                const initialProfile = {
+                    uid: user.uid,
+                    name: user.displayName || (user.email ? user.email.split("@")[0] : "Rider"),
+                    city: "Kolkata",
+                    phone: user.phoneNumber || "",
+                    email: user.email || null,
+                    auth_provider: user.providerData?.[0]?.providerId || "google"
+                };
+                try {
+                    profile = await dbService.saveUserProfile(user.uid, initialProfile);
+                    console.log("[Auth Debug] Rider profile provisioned successfully:", profile);
+                } catch (saveErr) {
+                    console.warn("[Auth Debug] Profile auto-save notice:", saveErr);
+                    profile = initialProfile;
+                }
+            }
+
+            if (profile && (profile.name || profile.email)) {
+                console.log("[Auth Debug] Rider profile active. Scheduling redirect to index.html in 1.2s...");
                 utils.showAlert(authAlert, "Successfully logged in! Redirecting...", "success");
                 setTimeout(() => {
                     console.log("[Auth Debug] Executing rider redirect: window.location.href = '../../index.html'");

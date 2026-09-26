@@ -263,14 +263,20 @@ async function handleUserSessionChange(user) {
         currentUser = user;
         startInactivityTracker();
         try {
-            const profile = await dbService.getUserProfile(user.uid);
+            let profile = await dbService.getUserProfile(user.uid);
+            if (!profile && user) {
+                profile = {
+                    uid: user.uid,
+                    name: user.displayName || (user.email ? user.email.split("@")[0] : "Rider"),
+                    city: "Kolkata",
+                    phone: user.phoneNumber || "",
+                    email: user.email || null
+                };
+            }
             if (profile) {
                 currentProfile = profile;
                 riderWelcome.textContent = `Welcome, ${profile.name || "Rider"}`;
                 utils.showElement(riderWelcome);
-            } else {
-                // Authed but lacks a profile entry -> redirect to register form
-                window.location.href = "../auth/auth.html";
             }
         } catch (error) {
             console.error("Failed to read user profile:", error);
