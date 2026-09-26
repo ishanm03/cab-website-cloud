@@ -343,9 +343,14 @@ function showProfileCompletionPanel(user) {
     utils.hideElement(authMethodsPanel);
     utils.showElement(profileCompletionPanel);
 
+    if (user.displayName && !profileName.value) {
+        profileName.value = user.displayName;
+    }
+
     // If signed up via Google, phone is missing -> collect it
     if (user.phoneNumber) {
         // Phone Auth - we already verified phone
+        profilePhone.value = user.phoneNumber;
         utils.hideElement(profilePhoneContainer);
         profilePhone.required = false;
     } else {
