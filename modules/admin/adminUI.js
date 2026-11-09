@@ -757,6 +757,17 @@ function showBookingDetailModal(booking) {
     
     // Bind action click handlers on the modal buttons
     bindCardActionButtonEvents(bookingDetailModalBody);
+
+    // Direct close handler binding on top 'X' button
+    const closeBtn = document.getElementById("btn-close-booking-detail");
+    if (closeBtn) {
+        closeBtn.onclick = (e) => {
+            e.stopPropagation();
+            utils.hideElement(bookingDetailModal);
+            bookingDetailModalBody.innerHTML = "";
+            destroyAllAdminMaps();
+        };
+    }
 }
 
 function buildBookingCardContentHtml(booking, isModal = false) {
