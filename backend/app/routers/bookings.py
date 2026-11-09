@@ -655,3 +655,51 @@ async def submit_booking_feedback(
             detail=f"Failed to submit feedback: {str(e)}"
         )
 
+@router.get("/bookings/{booking_id}/invoice")
+async def get_booking_invoice(
+    booking_id: str,
+    current_user: AuthenticatedUser = Depends(get_current_user)
+):
+    """
+    Fetch verified invoice data for a booking.
+    Authorized for the ride's customer or an admin.
+    """
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database offline."
+        )
+    try:
+        doc_ref = db.collection("bookings").document(booking_id)
+        doc_snap = doc_ref.get()
+        if not doc_snap.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Booking {booking_id} not found."
+            )
+        booking = doc_snap.to_dict()
+        
+        # Verify ownership (customer or admin)
+        is_owner = booking.get("customer_id") == current_user.uid
+        is_admin = getattr(current_user, "role", None) == "admin" or \
+                   current_user.email in settings.SUPER_ADMIN_EMAILS
+        
+        if not (is_owner or is_admin):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unauthorized: You do not have permission to view this invoice."
+            )
+            
+        return {
+            "status": "success",
+            "invoice": booking
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch invoice: {str(e)}"
+        )
+
+

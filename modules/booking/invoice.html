@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tax Invoice - SethCabs</title>
+    
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        .font-heading {
+            font-family: 'Outfit', sans-serif;
+        }
+
+        /* Print Media Stylesheet */
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 12mm;
+            }
+            body {
+                background: #ffffff !important;
+                color: #0f172a !important;
+                padding: 0 !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-card {
+                background: #ffffff !important;
+                border: 1px solid #cbd5e1 !important;
+                box-shadow: none !important;
+                color: #0f172a !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                max-width: 100% !important;
+            }
+            .print-text-dark {
+                color: #0f172a !important;
+            }
+            .print-text-muted {
+                color: #64748b !important;
+            }
+            .print-bg-light {
+                background-color: #f8fafc !important;
+            }
+            .print-border {
+                border-color: #e2e8f0 !important;
+            }
+            .print-header-brand {
+                color: #0f172a !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen py-8 px-4 sm:px-6 lg:px-8">
+
+    <!-- Top Action Toolbar (Hidden during print) -->
+    <div class="max-w-4xl mx-auto mb-6 flex flex-wrap items-center justify-between gap-3 no-print">
+        <a href="../../index.html" class="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white bg-slate-900 border border-slate-800 hover:border-slate-700 px-4 py-2.5 rounded-xl transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+            </svg>
+            <span>Back to SethCabs</span>
+        </a>
+
+        <div class="flex items-center gap-2.5">
+            <button type="button" id="btn-share-whatsapp" class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-600/20 active:scale-95">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 14.99 3.81 13.47 3.81 11.91C3.81 7.37 7.5 3.67 12.05 3.67Z"/>
+                </svg>
+                <span>Share Invoice</span>
+            </button>
+
+            <button type="button" id="btn-print-invoice" class="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-amber-500/20 active:scale-95">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+                </svg>
+                <span>Print / Save as PDF</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Alert Banner (Loading / Error states) -->
+    <div id="invoice-alert" class="max-w-4xl mx-auto mb-6 hidden"></div>
+
+    <!-- Loader State -->
+    <div id="invoice-loader" class="max-w-4xl mx-auto bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center flex flex-col items-center justify-center">
+        <div class="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-sm font-semibold text-slate-300">Retrieving official invoice details...</p>
+    </div>
+
+    <!-- MAIN INVOICE CONTAINER -->
+    <main id="invoice-container" class="max-w-4xl mx-auto bg-slate-900/90 border border-slate-800 rounded-3xl shadow-2xl p-6 sm:p-10 relative overflow-hidden print-card hidden">
+        
+        <!-- Header Banner: Brand & Invoice Meta -->
+        <header class="border-b border-slate-800 pb-8 print-border">
+            <div class="flex flex-col sm:flex-row justify-between items-start gap-6">
+                <!-- Brand Info -->
+                <div>
+                    <div class="flex items-center gap-2.5 mb-2">
+                        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-300 flex items-center justify-center text-slate-950 font-black shadow-md">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.22.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm11 0c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM5 11l1.5-4.5h11L19 11H5z"/>
+                            </svg>
+                        </div>
+                        <span class="font-heading text-2xl font-black tracking-tight text-white print-header-brand">SethCabs</span>
+                    </div>
+                    <p class="text-xs text-slate-400 print-text-muted leading-relaxed">
+                        <strong class="text-slate-200 print-text-dark font-semibold">SethCabs Premium Transport Services</strong><br>
+                        Airport Terminal & City Central Hub, Kolkata, WB 700052<br>
+                        24/7 Dispatch Hotline: <a href="tel:+918981538038" class="text-amber-400 hover:underline print-text-dark font-medium">+91 89815 38038</a><br>
+                        Email: support@sethcabs.com | GSTIN: 19AAECS9812F1Z4
+                    </p>
+                </div>
+
+                <!-- Invoice Meta Details -->
+                <div class="sm:text-right">
+                    <span id="invoice-status-pill" class="inline-block px-3 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider mb-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                        Ride Confirmed
+                    </span>
+                    <h1 class="text-xl sm:text-2xl font-black font-heading tracking-tight text-white print-text-dark uppercase">
+                        Tax Invoice / Bill of Supply
+                    </h1>
+                    <p class="text-xs text-slate-400 print-text-muted mt-1">
+                        Invoice No: <span id="inv-serial-number" class="font-bold text-amber-400 print-text-dark">INV-20261109-0001</span><br>
+                        Date of Issue: <span id="inv-issue-date" class="font-medium text-slate-200 print-text-dark">--</span><br>
+                        Booking Ref: <span id="inv-booking-id" class="font-bold text-slate-200 print-text-dark">BK-...</span>
+                    </p>
+                </div>
+            </div>
+        </header>
+
+        <!-- Customer & Service Overview Grid -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 gap-6 my-8">
+            <!-- Billed To -->
+            <div class="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5 print-bg-light print-border">
+                <span class="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-2">Billed To (Passenger)</span>
+                <h3 id="inv-customer-name" class="text-sm sm:text-base font-bold text-white print-text-dark">--</h3>
+                <p class="text-xs text-slate-400 print-text-muted mt-1 leading-relaxed">
+                    Phone: <span id="inv-customer-phone" class="text-slate-300 print-text-dark font-medium">--</span><br>
+                    Email: <span id="inv-customer-email" class="text-slate-300 print-text-dark font-medium">--</span><br>
+                    Service City: <span id="inv-customer-city" class="text-slate-300 print-text-dark font-medium">Kolkata & Howrah</span>
+                </p>
+            </div>
+
+            <!-- Vehicle & Driver Allocation -->
+            <div class="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-4 sm:p-5 print-bg-light print-border">
+                <span class="text-[10px] font-black uppercase tracking-wider text-amber-400 block mb-2">Vehicle & Driver Details</span>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                        <span class="text-slate-500 print-text-muted text-[10px] block">Vehicle Class</span>
+                        <strong id="inv-vehicle-tier" class="text-slate-200 print-text-dark uppercase font-bold text-xs sm:text-sm">--</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 print-text-muted text-[10px] block">Vehicle License</span>
+                        <strong id="inv-vehicle-number" class="text-amber-400 print-text-dark uppercase font-bold text-xs sm:text-sm">Allocated</strong>
+                    </div>
+                    <div class="col-span-2 pt-2 border-t border-slate-800 print-border">
+                        <span class="text-slate-500 print-text-muted text-[10px] block">Allocated Chauffeur</span>
+                        <span id="inv-driver-name" class="text-slate-200 print-text-dark font-semibold">--</span>
+                        <span id="inv-driver-phone" class="text-slate-400 print-text-muted text-[11px] block">--</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Route & Itinerary Details -->
+        <section class="bg-slate-950/40 border border-slate-800/80 rounded-2xl p-5 mb-8 print-bg-light print-border">
+            <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 print-text-muted block mb-3">Trip Itinerary</span>
+            
+            <div class="space-y-3 text-xs">
+                <!-- Pickup -->
+                <div class="flex items-start gap-3">
+                    <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
+                        P
+                    </div>
+                    <div class="flex-1">
+                        <span class="text-[10px] text-slate-500 print-text-muted uppercase font-bold block">Pickup Address & Time</span>
+                        <strong id="inv-pickup-address" class="text-slate-200 print-text-dark block">--</strong>
+                        <span id="inv-pickup-datetime" class="text-slate-400 print-text-muted text-[11px]">--</span>
+                    </div>
+                </div>
+
+                <!-- Intermediate Stops (Dynamic) -->
+                <div id="inv-stops-container" class="space-y-2 pl-2"></div>
+
+                <!-- Drop -->
+                <div class="flex items-start gap-3 pt-2 border-t border-slate-900 print-border">
+                    <div class="w-5 h-5 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
+                        D
+                    </div>
+                    <div class="flex-1">
+                        <span class="text-[10px] text-slate-500 print-text-muted uppercase font-bold block">Destination Drop</span>
+                        <strong id="inv-drop-address" class="text-slate-200 print-text-dark block">--</strong>
+                    </div>
+                </div>
+
+                <!-- Distance and Trip Parameters -->
+                <div class="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800/60 print-border text-slate-400 print-text-muted text-[11px]">
+                    <div>
+                        <span>Ride Category:</span> <strong id="inv-ride-category" class="text-slate-200 print-text-dark uppercase font-semibold">--</strong>
+                    </div>
+                    <div>
+                        <span>Estimated Distance:</span> <strong id="inv-route-distance" class="text-slate-200 print-text-dark font-semibold">-- km</strong>
+                    </div>
+                    <div>
+                        <span>Trip Type:</span> <strong id="inv-trip-type" class="text-slate-200 print-text-dark uppercase font-semibold">One-Way</strong>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Itemized Fare Table -->
+        <section class="mb-8">
+            <span class="text-[10px] font-black uppercase tracking-wider text-slate-400 print-text-muted block mb-3">Itemized Fare Breakdown</span>
+            
+            <div class="border border-slate-800 rounded-2xl overflow-hidden print-border">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-950 border-b border-slate-800 text-[10px] font-black uppercase tracking-wider text-slate-400 print-bg-light print-border print-text-muted">
+                        <tr>
+                            <th class="py-3 px-4">Line Item / Description</th>
+                            <th class="py-3 px-4 text-center">Basis / Rate</th>
+                            <th class="py-3 px-4 text-right">Amount (INR)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inv-line-items-body" class="divide-y divide-slate-800/60 print-border">
+                        <!-- Populated dynamically via invoice.js -->
+                    </tbody>
+                    <tfoot class="bg-slate-950/80 border-t-2 border-slate-700 print-bg-light print-border">
+                        <tr>
+                            <td colspan="2" class="py-4 px-4 text-right font-bold text-slate-300 print-text-dark text-xs uppercase">
+                                Total Fare Payable (Includes all taxes)
+                            </td>
+                            <td class="py-4 px-4 text-right font-heading text-lg sm:text-xl font-black text-amber-400 print-text-dark" id="inv-total-amount">
+                                ₹0/-
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <p class="text-xs text-slate-400 print-text-muted mt-2 italic text-right" id="inv-amount-in-words">
+                --
+            </p>
+        </section>
+
+        <!-- Payment & Terms Footer -->
+        <footer class="border-t border-slate-800 pt-6 text-xs text-slate-400 print-text-muted print-border space-y-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                    <span class="font-bold text-slate-300 print-text-dark">Payment Status:</span>
+                    <span id="inv-payment-status" class="ml-1 text-emerald-400 font-semibold uppercase">Pending (Pay to Driver via Cash/UPI)</span>
+                </div>
+                <div>
+                    <span class="font-bold text-slate-300 print-text-dark">Channel:</span>
+                    <span class="ml-1 uppercase text-slate-400 print-text-muted">SethCabs Web Booking Engine</span>
+                </div>
+            </div>
+
+            <div class="text-[10px] text-slate-500 print-text-muted leading-relaxed border-t border-slate-800/50 print-border pt-4">
+                <p><strong>Terms & Conditions:</strong></p>
+                <ol class="list-decimal pl-4 space-y-0.5 mt-1">
+                    <li>Fares are inclusive of standard GST (5% Passenger Transport Services with no input tax credit).</li>
+                    <li>Highway toll taxes, parking fees, and state border entry taxes are payable directly at actuals by passenger unless specifically included.</li>
+                    <li>This is a computer-generated tax invoice and requires no physical signature under Indian IT Act 2000.</li>
+                    <li>For feedback, assistance, or lost property inquiries, please contact SethCabs Dispatch 24/7 at +91 89815 38038.</li>
+                </ol>
+            </div>
+        </footer>
+
+    </main>
+
+    <!-- Custom Invoice JavaScript -->
+    <script type="module" src="invoice.js"></script>
+</body>
+</html>

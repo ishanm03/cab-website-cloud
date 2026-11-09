@@ -653,6 +653,26 @@ function setupListViewToggles() {
             destroyAllAdminMaps(); // Safe cleanup
         });
     }
+
+    // Close booking detail modal on outside backdrop click
+    if (bookingDetailModal) {
+        bookingDetailModal.addEventListener("click", (e) => {
+            if (e.target === bookingDetailModal) {
+                utils.hideElement(bookingDetailModal);
+                bookingDetailModalBody.innerHTML = "";
+                destroyAllAdminMaps();
+            }
+        });
+    }
+
+    // Close booking detail modal on Escape key press
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && bookingDetailModal && !bookingDetailModal.classList.contains("hidden")) {
+            utils.hideElement(bookingDetailModal);
+            bookingDetailModalBody.innerHTML = "";
+            destroyAllAdminMaps();
+        }
+    });
 }
 
 function setupDateFilterAndPaginationEvents() {
@@ -1013,6 +1033,9 @@ function buildBookingCardContentHtml(booking, isModal = false) {
                     <button type="button" class="btn-approve flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200" data-id="${booking.id}">
                         Reassign Driver
                     </button>
+                    <button type="button" class="btn-admin-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="View official tax invoice">
+                        📄 Invoice
+                    </button>
                 `;
             })() : ""}
 
@@ -1023,12 +1046,30 @@ function buildBookingCardContentHtml(booking, isModal = false) {
                 <button type="button" class="btn-text-rider flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
                     Text Rider
                 </button>
+                <button type="button" class="btn-admin-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="View official tax invoice">
+                    📄 Invoice
+                </button>
             ` : ""}
 
-            ${booking.status === "completed" || booking.status === "rejected" ? `
+            ${booking.status === "completed" ? `
+                <div class="flex items-center justify-between w-full gap-2">
+                    <span class="text-slate-600 text-[10px] uppercase font-bold tracking-widest py-1">Archived History Record</span>
+                    <button type="button" class="btn-admin-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-2 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="View official tax invoice">
+                        📄 Invoice
+                    </button>
+                </div>
+            ` : (booking.status === "rejected" ? `
                 <span class="text-slate-600 text-[10px] uppercase font-bold tracking-widest text-center w-full py-1">Archived History Record</span>
-            ` : ""}
+            ` : "")}
         </div>
+
+        ${isModal ? `
+            <div class="mt-5 pt-4 border-t border-slate-800/80 flex justify-end">
+                <button type="button" class="btn-modal-close-bottom px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95">
+                    Close Details
+                </button>
+            </div>
+        ` : ""}
     `;
 }
 
@@ -1302,6 +1343,27 @@ function bindCardActionButtonEvents(container = document) {
             } else {
                 utils.showAlert(adminAlert, "Rider phone details are unavailable.");
             }
+        });
+    });
+
+    // 5. Admin View Invoice trigger
+    const invoiceButtons = container.querySelectorAll(".btn-admin-invoice");
+    invoiceButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const bookingId = btn.getAttribute("data-id");
+            if (bookingId) {
+                window.open(`/modules/booking/invoice.html?id=${encodeURIComponent(bookingId)}`, "_blank");
+            }
+        });
+    });
+
+    // 6. Modal bottom close trigger
+    const modalCloseButtons = container.querySelectorAll(".btn-modal-close-bottom");
+    modalCloseButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            utils.hideElement(bookingDetailModal);
+            bookingDetailModalBody.innerHTML = "";
+            destroyAllAdminMaps();
         });
     });
 }

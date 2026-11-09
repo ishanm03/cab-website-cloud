@@ -66,6 +66,15 @@ function initActivityUI() {
         // Destroy all maps
         Object.keys(riderMaps).forEach(id => destroyRiderMap(id));
     });
+
+    // 4. Close on backdrop click
+    activityModal.addEventListener("click", (e) => {
+        if (e.target === activityModal) {
+            utils.hideElement(activityModal);
+            stopActivitySnapshotListener();
+            Object.keys(riderMaps).forEach(id => destroyRiderMap(id));
+        }
+    });
 }
 
 // Stream the user's specific bookings in real-time
@@ -249,6 +258,22 @@ function renderActivityList() {
                 <p class="text-[10px] text-slate-500 text-center italic py-1">Waiting for dispatch team approval. WhatsApp alerts have reached our controllers.</p>
                 ` : ""}
 
+                <!-- Official Tax Invoice Action Button -->
+                ${(booking.status === "confirmed" || booking.status === "active" || booking.status === "completed") ? `
+                <div class="border-t border-slate-800/60 pt-3 flex items-center justify-between">
+                    <div>
+                        <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Official Receipt</span>
+                        <span class="text-[11px] text-slate-400">Tax Invoice & Route Bill</span>
+                    </div>
+                    <a href="/modules/booking/invoice.html?id=${encodeURIComponent(booking.booking_id || booking.id)}" target="_blank" class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-400 font-bold rounded-xl text-xs transition-all active:scale-95 shadow-sm">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <span>📄 View / Print Invoice</span>
+                    </a>
+                </div>
+                ` : ""}
+
                 <!-- Feedback Section: Render review or input fields -->
                 ${booking.status === "completed" ? `
                     <div class="border-t border-slate-800/40 pt-4" id="feedback-section-${booking.id}">
@@ -298,6 +323,16 @@ function renderActivityList() {
                     </div>
                 ` : ""}
 
+                <!-- Bottom Collapse Button -->
+                <div class="pt-3 border-t border-slate-800/40 flex justify-center">
+                    <button type="button" class="btn-collapse-card text-[11px] font-semibold text-slate-400 hover:text-amber-400 inline-flex items-center gap-1.5 transition-colors py-1.5 px-3 rounded-lg hover:bg-slate-800/50" data-id="${booking.id}">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/>
+                        </svg>
+                        <span>Collapse Details</span>
+                    </button>
+                </div>
+
             </div>
         `;
 
@@ -326,6 +361,24 @@ function bindActivityListInteractiveEvents() {
             } else {
                 detailPanel.classList.add("hidden");
                 trigger.parentElement.classList.remove("border-amber-500/30");
+                destroyRiderMap(bookingId);
+            }
+        });
+    });
+
+    // 1.5. Collapse button click handlers
+    const collapseButtons = document.querySelectorAll(".btn-collapse-card");
+    collapseButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const bookingId = btn.getAttribute("data-id");
+            const detailPanel = document.getElementById(`details-${bookingId}`);
+            if (detailPanel) {
+                detailPanel.classList.add("hidden");
+                const cardHeader = document.querySelector(`.btn-toggle-details[data-id="${bookingId}"]`);
+                if (cardHeader) {
+                    cardHeader.parentElement.classList.remove("border-amber-500/30");
+                    cardHeader.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }
                 destroyRiderMap(bookingId);
             }
         });
