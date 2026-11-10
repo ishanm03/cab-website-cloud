@@ -10,6 +10,8 @@ from google.cloud.firestore import SERVER_TIMESTAMP
 from app.core.firebase import db
 from app.core.config import settings
 from app.core.auth import get_current_user, require_admin, AuthenticatedUser
+from app.services.email_service import send_booking_received_email
+from app.services.telegram_service import send_telegram_booking_alert
 from app.schemas.pydantic_models import (
     AvailabilityResponse,
     QuoteEstimateRequest,
@@ -516,6 +518,14 @@ async def create_booking(
 
         # Save to database
         db.collection("bookings").document(booking_id).set(booking_payload)
+
+        # Trigger customer email & admin telegram notifications (fail-safe)
+        try:
+            send_booking_received_email(booking_payload)
+            send_telegram_booking_alert(booking_payload)
+        except Exception as notify_err:
+            print(f"SethCabs Booking: Warning - Notification dispatch error: {str(notify_err)}")
+
         return {
             "status": "success",
             "booking_id": booking_id

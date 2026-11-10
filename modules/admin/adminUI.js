@@ -243,6 +243,323 @@ const bookingDetailModal = document.getElementById("booking-detail-modal");
 const bookingDetailModalBody = document.getElementById("booking-detail-modal-body");
 const btnCloseBookingDetail = document.getElementById("btn-close-booking-detail");
 
+// 1-Click WhatsApp & Audio Alert DOM handles & State
+const whatsappDispatchModal = document.getElementById("whatsapp-dispatch-modal");
+const btnCloseWhatsappDispatch = document.getElementById("btn-close-whatsapp-dispatch");
+const btnDismissWhatsappDispatch = document.getElementById("btn-dismiss-whatsapp-dispatch");
+const btnToggleChime = document.getElementById("btn-toggle-chime");
+
+let isChimeMuted = localStorage.getItem("admin_chime_muted") === "true";
+let seenBookingIds = new Set();
+let isInitialBookingsSnapshot = true;
+
+function formatCleanPhone(phone) {
+    if (!phone) return "";
+    let clean = phone.toString().replace(/\D/g, "");
+    if (clean.length === 10) {
+        clean = "91" + clean;
+    }
+    return clean;
+}
+
+function getHoldingReplyUrl(booking) {
+    const cust = booking.customer_details || {};
+    const trip = booking.trip_details || {};
+    const cleanPhone = formatCleanPhone(cust.phone);
+    if (!cleanPhone) return null;
+
+    const custName = cust.name || "Rider";
+    const bookingId = booking.booking_id || booking.id || "N/A";
+    const pickupDate = trip.pickup_date || "--";
+    const pickupTime = trip.pickup_time || "--";
+    const pickupLoc = trip.pickup_location || "Not specified";
+    const dropLoc = trip.drop_location || "Not specified";
+
+    const text = 
+`🚖 *SETHCABS: BOOKING UNDER REVIEW*
+━━━━━━━━━━━━━━━━━━━━
+Dear *${custName}*,
+We have received your booking request *${bookingId}* for *${pickupDate} at ${pickupTime}*.
+📍 *Route:* ${pickupLoc} ➔ ${dropLoc}
+
+Our dispatch team is currently reviewing driver availability and will get back to you shortly with full confirmation details.
+
+📞 Helpline: +91 89815 38038
+━━━━━━━━━━━━━━━━━━━━`;
+
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+}
+
+function getCustomerConfirmationUrl(booking) {
+    const cust = booking.customer_details || {};
+    const trip = booking.trip_details || {};
+    const fare = booking.fare_details || {};
+    const driver = booking.driver_assignment || {};
+    const cleanPhone = formatCleanPhone(cust.phone);
+    if (!cleanPhone) return null;
+
+    const custName = cust.name || "Rider";
+    const bookingId = booking.booking_id || booking.id || "N/A";
+    const pickupDate = trip.pickup_date || "--";
+    const pickupTime = trip.pickup_time || "--";
+    const pickupLoc = trip.pickup_location || "Not specified";
+    const dropLoc = trip.drop_location || "Not specified";
+    const driverName = driver.driver_name || "Assigned Chauffeur";
+    const driverPhone = driver.driver_phone || "N/A";
+    const vehicleNumber = driver.vehicle_number || "N/A";
+    const vehicleTier = (fare.vehicle_tier || "Sedan").toUpperCase();
+    const finalFare = fare.estimated_fare || fare.base_fare || 0;
+
+    const text = 
+`🚖 *SETHCABS: RIDE CONFIRMED*
+━━━━━━━━━━━━━━━━━━━━
+Dear *${custName}*,
+Your booking *${bookingId}* is confirmed!
+
+🚘 *Vehicle:* ${vehicleNumber} (${vehicleTier})
+👨‍✈️ *Chauffeur:* ${driverName}
+📞 *Chauffeur Contact:* ${driverPhone}
+📅 *Pickup:* ${pickupDate} at ${pickupTime}
+📍 *Pickup Point:* ${pickupLoc}
+🎯 *Drop:* ${dropLoc}
+💵 *Total Fare:* ₹${finalFare}/-
+
+Your chauffeur will arrive 10-15 minutes prior to the pickup time.
+📞 Dispatch Helpline: +91 89815 38038
+━━━━━━━━━━━━━━━━━━━━`;
+
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+}
+
+function getDriverTripSheetUrl(booking) {
+    const driver = booking.driver_assignment || {};
+    const cust = booking.customer_details || {};
+    const trip = booking.trip_details || {};
+    const fare = booking.fare_details || {};
+    const cleanDriverPhone = formatCleanPhone(driver.driver_phone);
+    if (!cleanDriverPhone) return null;
+
+    const custName = cust.name || "Rider";
+    const custPhone = cust.phone || "N/A";
+    const bookingId = booking.booking_id || booking.id || "N/A";
+    const pickupDate = trip.pickup_date || "--";
+    const pickupTime = trip.pickup_time || "--";
+    const pickupLoc = trip.pickup_location || "Not specified";
+    const dropLoc = trip.drop_location || "Not specified";
+    const vehicleNumber = driver.vehicle_number || "N/A";
+    const vehicleTier = (fare.vehicle_tier || "Sedan").toUpperCase();
+    const finalFare = fare.estimated_fare || fare.base_fare || 0;
+
+    let navQuery = pickupLoc;
+    if (trip.pickup_coords && Array.isArray(trip.pickup_coords)) {
+        navQuery = `${trip.pickup_coords[0]},${trip.pickup_coords[1]}`;
+    }
+    const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(navQuery)}`;
+
+    const text = 
+`🚖 *SETHCABS DRIVER TRIP SHEET*
+━━━━━━━━━━━━━━━━━━━━
+*Duty Date/Time:* ${pickupDate} at ${pickupTime}
+*Booking ID:* ${bookingId}
+
+📍 *Pickup Address:* ${pickupLoc}
+🗺️ *Pickup Navigation (Google Maps):* ${navUrl}
+🎯 *Drop Destination:* ${dropLoc}
+
+👤 *Passenger Name:* ${custName}
+📞 *Call Passenger:* ${custPhone}
+
+🚘 *Vehicle Plate:* ${vehicleNumber} (${vehicleTier})
+💵 *Total Collectible Fare:* ₹${finalFare}/-
+━━━━━━━━━━━━━━━━━━━━
+⚠️ Please arrive 15 minutes before pickup time in proper uniform.
+Report any delays immediately to dispatch: 8981538038.`;
+
+    return `https://wa.me/${cleanDriverPhone}?text=${encodeURIComponent(text)}`;
+}
+
+function getCustomerCancellationUrl(booking, customReason = "") {
+    const cust = booking.customer_details || {};
+    const trip = booking.trip_details || {};
+    const cleanPhone = formatCleanPhone(cust.phone);
+    if (!cleanPhone) return null;
+
+    const custName = cust.name || "Rider";
+    const bookingId = booking.booking_id || booking.id || "N/A";
+    const pickupDate = trip.pickup_date || "--";
+    const pickupTime = trip.pickup_time || "--";
+    const reason = customReason || booking.rejection_reason || "Operational unavailability on this route/time.";
+
+    const text = 
+`🚖 *SETHCABS: BOOKING UPDATE*
+━━━━━━━━━━━━━━━━━━━━
+Dear *${custName}*,
+Regarding your booking request *${bookingId}* for *${pickupDate} at ${pickupTime}*:
+We regret to inform you that we are unable to accept this booking request at this time.
+
+⚠️ *Reason:* ${reason}
+
+For urgent travel assistance or alternate arrangements, please call our 24x7 desk: +91 89815 38038.
+━━━━━━━━━━━━━━━━━━━━`;
+
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+}
+
+function getRideStartedUrl(booking) {
+    const cust = booking.customer_details || {};
+    const trip = booking.trip_details || {};
+    const driver = booking.driver_assignment || {};
+    const cleanPhone = formatCleanPhone(cust.phone);
+    if (!cleanPhone) return null;
+
+    const custName = cust.name || "Rider";
+    const bookingId = booking.booking_id || booking.id || "N/A";
+    const dropLoc = trip.drop_location || "Destination";
+    const driverName = driver.driver_name || "Assigned Chauffeur";
+    const driverPhone = driver.driver_phone || "N/A";
+    const vehicleNumber = driver.vehicle_number || "N/A";
+
+    const text = 
+`🚖 *SETHCABS: YOUR RIDE HAS STARTED*
+━━━━━━━━━━━━━━━━━━━━
+Dear *${custName}*,
+Your journey for booking *${bookingId}* has officially started.
+
+🚘 *Vehicle:* ${vehicleNumber}
+👨‍✈️ *Chauffeur:* ${driverName} (${driverPhone})
+🎯 *Destination:* ${dropLoc}
+
+Have a safe and comfortable trip with SethCabs!
+📞 Emergency / Support: +91 89815 38038
+━━━━━━━━━━━━━━━━━━━━`;
+
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+}
+
+function getRideCompletedUrl(booking) {
+    const cust = booking.customer_details || {};
+    const fare = booking.fare_details || {};
+    const cleanPhone = formatCleanPhone(cust.phone);
+    if (!cleanPhone) return null;
+
+    const custName = cust.name || "Rider";
+    const bookingId = booking.booking_id || booking.id || "N/A";
+    const finalFare = fare.estimated_fare || fare.base_fare || 0;
+    const invoiceUrl = `${window.location.origin}/modules/booking/invoice.html?id=${encodeURIComponent(bookingId)}`;
+
+    const text = 
+`🚖 *SETHCABS: TRIP COMPLETED & INVOICE*
+━━━━━━━━━━━━━━━━━━━━
+Dear *${custName}*,
+Thank you for traveling with SethCabs! Your trip *${bookingId}* has concluded.
+
+💰 *Total Fare:* ₹${finalFare}/-
+📄 *View / Download Tax Invoice:*
+${invoiceUrl}
+
+We hope you had a pleasant experience. Please rate your journey in your activity dashboard!
+📞 Support: +91 89815 38038
+━━━━━━━━━━━━━━━━━━━━`;
+
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+}
+
+function openWhatsAppDispatchModal(title, subtitle, actionButtons) {
+    const modal = document.getElementById("whatsapp-dispatch-modal");
+    const modalTitle = document.getElementById("whatsapp-modal-title");
+    const modalSubtitle = document.getElementById("whatsapp-modal-subtitle");
+    const modalContent = document.getElementById("whatsapp-modal-content");
+    if (!modal) return;
+
+    if (modalTitle) modalTitle.textContent = title;
+    if (modalSubtitle) modalSubtitle.textContent = subtitle;
+
+    if (modalContent) {
+        modalContent.innerHTML = "";
+        actionButtons.forEach(btnConfig => {
+            const btn = document.createElement("a");
+            btn.href = btnConfig.url;
+            btn.target = "_blank";
+            btn.rel = "noopener noreferrer";
+            btn.className = "w-full flex items-center justify-between p-3.5 rounded-2xl bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/50 text-white transition-all transform active:scale-98 group";
+            btn.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <span class="text-xl">${btnConfig.icon || "💬"}</span>
+                    <div class="text-left">
+                        <div class="text-xs font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">${btnConfig.label}</div>
+                        <div class="text-[11px] text-slate-400">${btnConfig.sublabel || ""}</div>
+                    </div>
+                </div>
+                <span class="text-xs font-bold text-emerald-400 group-hover:translate-x-1 transition-transform">Send ↗</span>
+            `;
+            modalContent.appendChild(btn);
+        });
+    }
+
+    utils.showElement(modal);
+}
+
+function playDispatcherChime() {
+    if (isChimeMuted) return;
+    try {
+        const AudioCtxClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtxClass) return;
+        const ctx = new AudioCtxClass();
+        const now = ctx.currentTime;
+
+        // Tone 1: 587.33 Hz (D5)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = "sine";
+        osc1.frequency.setValueAtTime(587.33, now);
+        gain1.gain.setValueAtTime(0.25, now);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.35);
+
+        // Tone 2: 880.00 Hz (A5)
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = "sine";
+        osc2.frequency.setValueAtTime(880.00, now + 0.12);
+        gain2.gain.setValueAtTime(0.3, now + 0.12);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 0.6);
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.start(now + 0.12);
+        osc2.stop(now + 0.6);
+    } catch (err) {
+        console.warn("SethCabs: Web Audio API chime error:", err);
+    }
+}
+
+function toggleChimeAudio() {
+    isChimeMuted = !isChimeMuted;
+    localStorage.setItem("admin_chime_muted", isChimeMuted ? "true" : "false");
+    updateChimeButtonUI();
+    if (!isChimeMuted) {
+        playDispatcherChime();
+    }
+}
+
+function updateChimeButtonUI() {
+    const btn = document.getElementById("btn-toggle-chime");
+    const icon = document.getElementById("chime-icon");
+    const text = document.getElementById("chime-text");
+    if (!btn) return;
+    if (isChimeMuted) {
+        if (icon) icon.textContent = "🔕";
+        if (text) text.textContent = "Chime: OFF";
+        btn.className = "inline-flex items-center gap-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-500 font-semibold py-2 px-3 rounded-xl transition-all duration-300 transform active:scale-95 text-xs";
+    } else {
+        if (icon) icon.textContent = "🔔";
+        if (text) text.textContent = "Chime: ON";
+        btn.className = "inline-flex items-center gap-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-amber-400 font-semibold py-2 px-3 rounded-xl transition-all duration-300 transform active:scale-95 text-xs";
+    }
+}
+
 // Date Filter & Pagination DOM handles
 const filterPickupDate = document.getElementById("filter-pickup-date");
 const btnClearDate = document.getElementById("btn-clear-date");
@@ -347,6 +664,27 @@ function initAdminUI() {
             resetDriverForm();
         });
     }
+
+    // 11. Chime Toggle & Initial UI
+    if (btnToggleChime) {
+        btnToggleChime.addEventListener("click", toggleChimeAudio);
+        updateChimeButtonUI();
+    }
+
+    // 12. 1-Click WhatsApp modal listeners
+    if (btnCloseWhatsappDispatch) {
+        btnCloseWhatsappDispatch.addEventListener("click", () => utils.hideElement(whatsappDispatchModal));
+    }
+    if (btnDismissWhatsappDispatch) {
+        btnDismissWhatsappDispatch.addEventListener("click", () => utils.hideElement(whatsappDispatchModal));
+    }
+    if (whatsappDispatchModal) {
+        whatsappDispatchModal.addEventListener("click", (e) => {
+            if (e.target === whatsappDispatchModal) {
+                utils.hideElement(whatsappDispatchModal);
+            }
+        });
+    }
 }
 
 let adminIdleTimer = null;
@@ -434,6 +772,26 @@ function startBookingsSnapshotListener() {
         firestoreUnsubscribe = onSnapshot(bookingsQuery, (snapshot) => {
             utils.hideElement(adminLoader);
             try {
+                // Real-time audio alert & chime for new pending booking requests
+                if (isInitialBookingsSnapshot) {
+                    snapshot.forEach((doc) => seenBookingIds.add(doc.id));
+                    isInitialBookingsSnapshot = false;
+                } else {
+                    snapshot.docChanges().forEach((change) => {
+                        if (change.type === "added" && !seenBookingIds.has(change.doc.id)) {
+                            seenBookingIds.add(change.doc.id);
+                            const bData = change.doc.data();
+                            const bStatus = bData.status;
+                            if (bStatus === "pending_approval" || bStatus === "pending" || bStatus === "requested") {
+                                playDispatcherChime();
+                                const custName = bData.customer_details?.name || "Rider";
+                                const route = `${bData.trip_details?.pickup_location || "Pickup"} ➔ ${bData.trip_details?.drop_location || "Drop"}`;
+                                utils.showAlert(adminAlert, `🔔 NEW BOOKING REQUEST from ${custName} (${route})`, "success");
+                            }
+                        }
+                    });
+                }
+
                 bookingsData = [];
                 snapshot.forEach((doc) => {
                     bookingsData.push({
@@ -665,12 +1023,17 @@ function setupListViewToggles() {
         });
     }
 
-    // Close booking detail modal on Escape key press
+    // Close modals on Escape key press
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && bookingDetailModal && !bookingDetailModal.classList.contains("hidden")) {
-            utils.hideElement(bookingDetailModal);
-            bookingDetailModalBody.innerHTML = "";
-            destroyAllAdminMaps();
+        if (e.key === "Escape") {
+            if (bookingDetailModal && !bookingDetailModal.classList.contains("hidden")) {
+                utils.hideElement(bookingDetailModal);
+                bookingDetailModalBody.innerHTML = "";
+                destroyAllAdminMaps();
+            }
+            if (whatsappDispatchModal && !whatsappDispatchModal.classList.contains("hidden")) {
+                utils.hideElement(whatsappDispatchModal);
+            }
         }
     });
 }
@@ -1005,16 +1368,19 @@ function buildBookingCardContentHtml(booking, isModal = false) {
         </div>
 
         <!-- Action Controllers Panel -->
-        <div class="mt-6 border-t border-slate-800/60 pt-4 flex gap-3">
+        <div class="mt-6 border-t border-slate-800/60 pt-4 flex flex-wrap gap-2">
             ${isRequestedStatus ? `
-                <button type="button" class="btn-approve flex-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-emerald-500/10" data-id="${booking.id}">
+                <button type="button" class="btn-approve flex-1 min-w-[100px] bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-emerald-500/10" data-id="${booking.id}">
                     Accept Ride
                 </button>
-                <button type="button" class="btn-reject flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-rose-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
+                <button type="button" class="btn-reject flex-1 min-w-[75px] bg-slate-950 hover:bg-slate-900 border border-slate-800 text-rose-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
                     Reject
                 </button>
-                <button type="button" class="btn-text-rider flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
-                    Text Rider
+                <button type="button" class="btn-holding-reply flex-1 min-w-[125px] bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-sky-500/50 text-sky-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="Send 1-Click WhatsApp holding reply to customer">
+                    💬 Holding Reply
+                </button>
+                <button type="button" class="btn-text-rider bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="Chat with rider on WhatsApp">
+                    Chat
                 </button>
             ` : ""}
 
@@ -1030,7 +1396,7 @@ function buildBookingCardContentHtml(booking, isModal = false) {
                 }
                 return `
                     <button type="button" 
-                        class="btn-start flex-1 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md ${
+                        class="btn-start flex-1 min-w-[110px] text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md ${
                             hasPassed 
                             ? "bg-blue-500 hover:bg-blue-600 text-white shadow-blue-500/10 cursor-pointer" 
                             : "bg-slate-900 text-slate-600 border border-slate-800/80 cursor-not-allowed"
@@ -1039,38 +1405,60 @@ function buildBookingCardContentHtml(booking, isModal = false) {
                         ${hasPassed ? "" : "disabled"}
                         title="${hasPassed ? "Click to start the ride" : "Ride cannot be started before the pickup time"}"
                     >
-                        ${hasPassed ? "Start Ride" : "Start Ride (Locked)"}
+                        ${hasPassed ? "Start Ride" : "Start (Locked)"}
                     </button>
-                    <button type="button" class="btn-approve flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200" data-id="${booking.id}">
-                        Reassign Driver
+                    <button type="button" class="btn-approve bg-slate-950 hover:bg-slate-900 border border-slate-800 text-slate-300 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200" data-id="${booking.id}">
+                        Reassign
                     </button>
-                    <button type="button" class="btn-admin-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="View official tax invoice">
+                    <button type="button" class="btn-whatsapp-confirm bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/50 text-emerald-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="Send 1-Click WhatsApp confirmation to customer">
+                        📲 Customer
+                    </button>
+                    <button type="button" class="btn-whatsapp-driver bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-cyan-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="Dispatch Trip Sheet to driver via WhatsApp">
+                        📋 Trip Sheet
+                    </button>
+                    <button type="button" class="btn-admin-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="View official tax invoice">
                         📄 Invoice
                     </button>
                 `;
             })() : ""}
 
             ${booking.status === "active" ? `
-                <button type="button" class="btn-complete flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-amber-500/10" data-id="${booking.id}">
+                <button type="button" class="btn-complete flex-1 min-w-[120px] bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95 shadow-md shadow-amber-500/10" data-id="${booking.id}">
                     Mark Completed
                 </button>
-                <button type="button" class="btn-text-rider flex-1 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}">
-                    Text Rider
+                <button type="button" class="btn-whatsapp-start bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-sky-500/50 text-sky-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="Send Ride Started notification to customer via WhatsApp">
+                    🚀 Notify Rider
                 </button>
-                <button type="button" class="btn-admin-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-3 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="View official tax invoice">
+                <button type="button" class="btn-whatsapp-driver bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-cyan-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="Dispatch Trip Sheet to driver via WhatsApp">
+                    📋 Trip Sheet
+                </button>
+                <button type="button" class="btn-text-rider bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="Chat with rider on WhatsApp">
+                    Chat
+                </button>
+                <button type="button" class="btn-admin-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-2.5 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="View official tax invoice">
                     📄 Invoice
                 </button>
             ` : ""}
 
             ${booking.status === "completed" ? `
-                <div class="flex items-center justify-between w-full gap-2">
+                <div class="flex items-center justify-between w-full flex-wrap gap-2">
                     <span class="text-slate-600 text-[10px] uppercase font-bold tracking-widest py-1">Archived History Record</span>
-                    <button type="button" class="btn-admin-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-2 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="View official tax invoice">
-                        📄 Invoice
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="btn-whatsapp-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-emerald-500/50 text-emerald-400 text-xs font-bold py-2 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="Send Invoice & Thank You to customer via WhatsApp">
+                            📲 WhatsApp Invoice
+                        </button>
+                        <button type="button" class="btn-admin-invoice bg-slate-950 hover:bg-slate-900 border border-slate-800 text-amber-400 text-xs font-bold py-2 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="View official tax invoice">
+                            📄 Invoice
+                        </button>
+                    </div>
+                </div>
+            ` : (booking.status === "rejected" || booking.status === "cancelled" ? `
+                <div class="flex items-center justify-between w-full flex-wrap gap-2">
+                    <span class="text-rose-500/80 text-[10px] uppercase font-bold tracking-widest py-1">Archived History Record</span>
+                    <button type="button" class="btn-whatsapp-cancel bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/50 text-rose-400 text-xs font-bold py-2 px-3 rounded-xl transition-all duration-200 transform active:scale-95" data-id="${booking.id}" title="Send Cancellation Notice to customer via WhatsApp">
+                        📲 WhatsApp Cancel Notice
                     </button>
                 </div>
-            ` : (booking.status === "rejected" ? `
-                <span class="text-slate-600 text-[10px] uppercase font-bold tracking-widest text-center w-full py-1">Archived History Record</span>
             ` : "")}
         </div>
 
@@ -1300,6 +1688,7 @@ function bindCardActionButtonEvents(container = document) {
     completeButtons.forEach(btn => {
         btn.addEventListener("click", async () => {
             const bookingId = btn.getAttribute("data-id");
+            const booking = bookingsData.find(b => b.id === bookingId);
             const confirmComplete = confirm(`Are you sure you want to mark booking ${bookingId} as Completed?`);
             if (confirmComplete) {
                 utils.showAlert(adminAlert, "Updating booking status...", "success");
@@ -1308,6 +1697,25 @@ function bindCardActionButtonEvents(container = document) {
                         status: "completed"
                     });
                     utils.showAlert(adminAlert, `Booking ${bookingId} marked completed successfully!`, "success");
+
+                    if (booking) {
+                        const updatedBooking = { ...booking, status: "completed" };
+                        const waInvoiceUrl = getRideCompletedUrl(updatedBooking);
+                        if (waInvoiceUrl) {
+                            openWhatsAppDispatchModal(
+                                "🎉 Ride Completed!",
+                                `Booking ${bookingId} has concluded. Send invoice & thank you to customer:`,
+                                [
+                                    {
+                                        icon: "📄",
+                                        label: "Send WhatsApp Invoice & Thank You",
+                                        sublabel: `${updatedBooking.customer_details?.name || "Rider"} (${updatedBooking.customer_details?.phone || ""})`,
+                                        url: waInvoiceUrl
+                                    }
+                                ]
+                            );
+                        }
+                    }
                 } catch (error) {
                     console.error("SethCabs: Failed to complete ride", error);
                     utils.showAlert(adminAlert, "Status update failed: " + error.message);
@@ -1321,6 +1729,7 @@ function bindCardActionButtonEvents(container = document) {
     startButtons.forEach(btn => {
         btn.addEventListener("click", async () => {
             const bookingId = btn.getAttribute("data-id");
+            const booking = bookingsData.find(b => b.id === bookingId);
             const confirmStart = confirm(`Are you sure you want to start booking ${bookingId}? This will change the status to On-Going.`);
             if (confirmStart) {
                 utils.showAlert(adminAlert, "Starting ride...", "success");
@@ -1329,6 +1738,25 @@ function bindCardActionButtonEvents(container = document) {
                         status: "active"
                     });
                     utils.showAlert(adminAlert, `Ride ${bookingId} has started!`, "success");
+
+                    if (booking) {
+                        const updatedBooking = { ...booking, status: "active" };
+                        const waStartUrl = getRideStartedUrl(updatedBooking);
+                        if (waStartUrl) {
+                            openWhatsAppDispatchModal(
+                                "🚀 Ride In Progress!",
+                                `Booking ${bookingId} has started. Notify the passenger:`,
+                                [
+                                    {
+                                        icon: "📲",
+                                        label: "Send WhatsApp Ride Started Alert",
+                                        sublabel: `${updatedBooking.customer_details?.name || "Rider"} (${updatedBooking.customer_details?.phone || ""})`,
+                                        url: waStartUrl
+                                    }
+                                ]
+                            );
+                        }
+                    }
                 } catch (error) {
                     console.error("SethCabs: Failed to start ride", error);
                     utils.showAlert(adminAlert, "Status update failed: " + error.message);
@@ -1337,7 +1765,103 @@ function bindCardActionButtonEvents(container = document) {
         });
     });
 
-    // 4. Text Rider trigger
+    // 4. Holding Reply trigger (1-Click WhatsApp)
+    const holdingButtons = container.querySelectorAll(".btn-holding-reply");
+    holdingButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const bookingId = btn.getAttribute("data-id");
+            const booking = bookingsData.find(b => b.id === bookingId);
+            if (!booking) return;
+            const url = getHoldingReplyUrl(booking);
+            if (url) {
+                window.open(url, "_blank");
+            } else {
+                utils.showAlert(adminAlert, "Customer phone number is missing.");
+            }
+        });
+    });
+
+    // 4.1. WhatsApp Confirmation to Customer trigger
+    const confirmWaButtons = container.querySelectorAll(".btn-whatsapp-confirm");
+    confirmWaButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const bookingId = btn.getAttribute("data-id");
+            const booking = bookingsData.find(b => b.id === bookingId);
+            if (!booking) return;
+            const url = getCustomerConfirmationUrl(booking);
+            if (url) {
+                window.open(url, "_blank");
+            } else {
+                utils.showAlert(adminAlert, "Customer phone number is missing.");
+            }
+        });
+    });
+
+    // 4.2. Driver Trip Sheet trigger (1-Click WhatsApp)
+    const driverWaButtons = container.querySelectorAll(".btn-whatsapp-driver");
+    driverWaButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const bookingId = btn.getAttribute("data-id");
+            const booking = bookingsData.find(b => b.id === bookingId);
+            if (!booking) return;
+            const url = getDriverTripSheetUrl(booking);
+            if (url) {
+                window.open(url, "_blank");
+            } else {
+                utils.showAlert(adminAlert, "Assigned driver phone number is missing. Please ensure a driver is allocated.");
+            }
+        });
+    });
+
+    // 4.3. Ride Started Alert trigger (1-Click WhatsApp)
+    const startWaButtons = container.querySelectorAll(".btn-whatsapp-start");
+    startWaButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const bookingId = btn.getAttribute("data-id");
+            const booking = bookingsData.find(b => b.id === bookingId);
+            if (!booking) return;
+            const url = getRideStartedUrl(booking);
+            if (url) {
+                window.open(url, "_blank");
+            } else {
+                utils.showAlert(adminAlert, "Customer phone number is missing.");
+            }
+        });
+    });
+
+    // 4.4. Ride Completed Invoice trigger (1-Click WhatsApp)
+    const invoiceWaButtons = container.querySelectorAll(".btn-whatsapp-invoice");
+    invoiceWaButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const bookingId = btn.getAttribute("data-id");
+            const booking = bookingsData.find(b => b.id === bookingId);
+            if (!booking) return;
+            const url = getRideCompletedUrl(booking);
+            if (url) {
+                window.open(url, "_blank");
+            } else {
+                utils.showAlert(adminAlert, "Customer phone number is missing.");
+            }
+        });
+    });
+
+    // 4.5. Ride Cancellation Alert trigger (1-Click WhatsApp)
+    const cancelWaButtons = container.querySelectorAll(".btn-whatsapp-cancel");
+    cancelWaButtons.forEach(btn => {
+        btn.addEventListener("click", () => {
+            const bookingId = btn.getAttribute("data-id");
+            const booking = bookingsData.find(b => b.id === bookingId);
+            if (!booking) return;
+            const url = getCustomerCancellationUrl(booking);
+            if (url) {
+                window.open(url, "_blank");
+            } else {
+                utils.showAlert(adminAlert, "Customer phone number is missing.");
+            }
+        });
+    });
+
+    // 4.6. Generic Text Rider trigger
     const textButtons = container.querySelectorAll(".btn-text-rider");
     textButtons.forEach(btn => {
         btn.addEventListener("click", () => {
@@ -1542,6 +2066,46 @@ async function handleApprovalFormSubmit(e) {
         await adminApiCall(`/admin/bookings/${bookingId}`, "PATCH", updatePayload);
 
         utils.showAlert(adminAlert, `Booking ${bookingId} approved and driver assigned successfully!`, "success");
+
+        const updatedBooking = {
+            ...booking,
+            ...updatePayload,
+            id: bookingId,
+            booking_id: bookingId,
+            driver_assignment: {
+                driver_name: driverName,
+                driver_phone: driverPhone,
+                vehicle_number: vehicleNumber
+            }
+        };
+
+        const custWaUrl = getCustomerConfirmationUrl(updatedBooking);
+        const driverWaUrl = getDriverTripSheetUrl(updatedBooking);
+
+        const actions = [];
+        if (custWaUrl) {
+            actions.push({
+                icon: "📲",
+                label: "Send WhatsApp Confirmation to Customer",
+                sublabel: `${updatedBooking.customer_details?.name || "Rider"} (${updatedBooking.customer_details?.phone || ""})`,
+                url: custWaUrl
+            });
+        }
+        if (driverWaUrl) {
+            actions.push({
+                icon: "📋",
+                label: "Dispatch Trip Sheet to Driver",
+                sublabel: `${driverName} (${driverPhone})`,
+                url: driverWaUrl
+            });
+        }
+        if (actions.length > 0) {
+            openWhatsAppDispatchModal(
+                "✓ Driver Assigned & Ride Confirmed!",
+                `Booking ${bookingId} has been confirmed. Dispatch 1-Click WhatsApp notifications below:`,
+                actions
+            );
+        }
     } catch (error) {
         console.error("SethCabs: Failed to approve ride", error);
         utils.showAlert(adminAlert, "Approval transaction failed: " + error.message);
@@ -1569,6 +2133,25 @@ async function handleRejectionFormSubmit(e) {
         });
 
         utils.showAlert(adminAlert, `Booking ${bookingId} rejected successfully.`, "success");
+
+        const booking = bookingsData.find(b => b.id === bookingId);
+        if (booking) {
+            const waCancelUrl = getCustomerCancellationUrl(booking, reason);
+            if (waCancelUrl) {
+                openWhatsAppDispatchModal(
+                    "⚠️ Booking Rejected",
+                    `Booking ${bookingId} marked as rejected. Send cancellation notice to customer:`,
+                    [
+                        {
+                            icon: "📲",
+                            label: "Send WhatsApp Cancellation Notice",
+                            sublabel: `${booking.customer_details?.name || "Rider"} (${booking.customer_details?.phone || ""})`,
+                            url: waCancelUrl
+                        }
+                    ]
+                );
+            }
+        }
     } catch (error) {
         console.error("SethCabs: Failed to reject ride", error);
         utils.showAlert(adminAlert, "Rejection transaction failed: " + error.message);

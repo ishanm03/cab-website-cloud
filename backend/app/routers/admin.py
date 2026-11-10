@@ -10,6 +10,12 @@ from firebase_admin import auth as firebase_auth
 from app.core.firebase import db
 from app.core.auth import require_admin, require_super_admin, AuthenticatedUser
 from app.schemas.pydantic_models import DbCleanupRequest, AdminUserPromoteRequest
+from app.services.email_service import (
+    send_booking_confirmed_email,
+    send_booking_rejected_email,
+    send_ride_started_email,
+    send_ride_completed_email
+)
 
 router = APIRouter(
     prefix="/admin",
@@ -32,13 +38,39 @@ async def update_booking(
         )
     try:
         doc_ref = db.collection("bookings").document(booking_id)
-        if not doc_ref.get().exists:
+        doc_snap = doc_ref.get()
+        if not doc_snap.exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Booking {booking_id} not found."
             )
+        existing_data = doc_snap.to_dict() or {}
         payload["updated_ts"] = SERVER_TIMESTAMP
         doc_ref.update(payload)
+
+        # Trigger corresponding lifecycle email notifications (fail-safe)
+        try:
+            merged_booking = {**existing_data, **payload, "booking_id": booking_id}
+            # Make sure nested dicts like trip_details, fare_details, customer_details are preserved
+            for k in ["trip_details", "fare_details", "customer_details", "driver_assignment"]:
+                if k in existing_data and k not in payload:
+                    merged_booking[k] = existing_data[k]
+
+            new_status = payload.get("status")
+            old_status = existing_data.get("status")
+
+            if new_status == "confirmed" or (new_status is None and old_status == "confirmed" and "driver_assignment" in payload):
+                send_booking_confirmed_email(merged_booking)
+            elif new_status in ("rejected", "cancelled"):
+                reason = payload.get("rejection_reason", existing_data.get("rejection_reason", ""))
+                send_booking_rejected_email(merged_booking, reason)
+            elif new_status == "active":
+                send_ride_started_email(merged_booking)
+            elif new_status == "completed":
+                send_ride_completed_email(merged_booking)
+        except Exception as notify_err:
+            print(f"SethCabs Admin: Warning - Notification dispatch error for {booking_id}: {str(notify_err)}")
+
         return {"status": "success", "booking_id": booking_id}
     except HTTPException:
         raise

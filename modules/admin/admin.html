@@ -41,7 +41,11 @@
                 <span class="bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded uppercase">Control Panel</span>
             </div>
             
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3">
+                <button type="button" id="btn-toggle-chime" class="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-amber-400 font-semibold py-2 px-3 rounded-xl transition-all duration-300 transform active:scale-95 text-xs" title="Toggle audio chime on new booking requests">
+                    <span id="chime-icon">🔔</span>
+                    <span id="chime-text" class="hidden sm:inline">Chime: ON</span>
+                </button>
                 <span class="text-sm font-semibold text-slate-300 hidden sm:inline" id="admin-welcome">Welcome, Admin</span>
                 <button type="button" id="btn-admin-logout" class="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 hover:border-rose-500/50 text-slate-300 hover:text-rose-400 font-semibold py-2 px-4 rounded-xl transition-all duration-300 transform active:scale-95 text-xs">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -1526,7 +1530,37 @@
         </div>
     </div>
 
+    <!-- 1-CLICK WHATSAPP DISPATCH MODAL -->
+    <div id="whatsapp-dispatch-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm hidden overflow-y-auto">
+        <div class="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative my-8">
+            <button type="button" id="btn-close-whatsapp-dispatch" class="absolute top-6 right-6 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white p-2.5 rounded-full transition-all duration-200 z-30 cursor-pointer shadow-md" aria-label="Close modal">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 text-2xl font-bold shadow-inner">
+                    💬
+                </div>
+                <div>
+                    <h2 id="whatsapp-modal-title" class="text-lg font-bold text-white">1-Click WhatsApp Dispatch</h2>
+                    <p id="whatsapp-modal-subtitle" class="text-xs text-slate-400">Send pre-filled WhatsApp notifications directly</p>
+                </div>
+            </div>
+            
+            <div id="whatsapp-modal-content" class="space-y-3 mt-5">
+                <!-- Action items populated dynamically -->
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-slate-800/80 flex justify-end">
+                <button type="button" id="btn-dismiss-whatsapp-dispatch" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Core Javascript Modules Loading -->
-    <script type="module" src="adminUI.js?v=20261109_inv2"></script>
+    <script type="module" src="adminUI.js?v=20261111_notif1"></script>
 </body>
 </html>

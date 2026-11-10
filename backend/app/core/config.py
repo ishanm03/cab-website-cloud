@@ -31,6 +31,56 @@ class Settings(BaseSettings):
         validation_alias="SUPER_ADMIN_EMAILS"
     )
 
+    # Notification & Alert Configurations
+    FRONTEND_BASE_URL: str = Field(
+        default="https://sethcabs-poc.web.app",
+        validation_alias="FRONTEND_BASE_URL"
+    )
+    DISPATCH_HELPLINE: str = Field(
+        default="+91 89815 38038",
+        validation_alias="DISPATCH_HELPLINE"
+    )
+
+    # Email Service Configuration (Resend API or SMTP)
+    RESEND_API_KEY: Optional[str] = Field(
+        default=None,
+        validation_alias="RESEND_API_KEY"
+    )
+    SMTP_HOST: Optional[str] = Field(
+        default=None,
+        validation_alias="SMTP_HOST"
+    )
+    SMTP_PORT: int = Field(
+        default=587,
+        validation_alias="SMTP_PORT"
+    )
+    SMTP_USER: Optional[str] = Field(
+        default=None,
+        validation_alias="SMTP_USER"
+    )
+    SMTP_PASSWORD: Optional[str] = Field(
+        default=None,
+        validation_alias="SMTP_PASSWORD"
+    )
+    SMTP_FROM_EMAIL: str = Field(
+        default="dispatch@sethcabs.com",
+        validation_alias="SMTP_FROM_EMAIL"
+    )
+    SMTP_FROM_NAME: str = Field(
+        default="SethCabs Dispatch",
+        validation_alias="SMTP_FROM_NAME"
+    )
+
+    # Telegram Bot Alert Configuration
+    TELEGRAM_BOT_TOKEN: Optional[str] = Field(
+        default=None,
+        validation_alias="TELEGRAM_BOT_TOKEN"
+    )
+    TELEGRAM_CHAT_ID: Optional[str] = Field(
+        default=None,
+        validation_alias="TELEGRAM_CHAT_ID"
+    )
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
