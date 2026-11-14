@@ -52,7 +52,8 @@ jobs:
           gcloud run deploy sethcabs-backend-dev \
             --image asia-east1-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/sethcabs-backend-dev/app:latest \
             --region asia-east1 \
-            --platform managed
+            --platform managed \
+            --set-env-vars "TELEGRAM_BOT_TOKEN=9148855324:AAFRFwapUxWbEEhba0mHqeYZXoV3NEDkAJg,TELEGRAM_CHAT_ID=-5573285365,FRONTEND_BASE_URL=https://sethcabs-poc.web.app"
 
       - name: Set up Python
         uses: actions/setup-python@v5

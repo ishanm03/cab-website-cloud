@@ -41,13 +41,13 @@ class Settings(BaseSettings):
         validation_alias="DISPATCH_HELPLINE"
     )
 
-    # Email Service Configuration (Resend API or SMTP)
+    # Email Service Configuration (Gmail SMTP)
     RESEND_API_KEY: Optional[str] = Field(
         default=None,
         validation_alias="RESEND_API_KEY"
     )
     SMTP_HOST: Optional[str] = Field(
-        default=None,
+        default="smtp.gmail.com",
         validation_alias="SMTP_HOST"
     )
     SMTP_PORT: int = Field(
@@ -55,7 +55,7 @@ class Settings(BaseSettings):
         validation_alias="SMTP_PORT"
     )
     SMTP_USER: Optional[str] = Field(
-        default=None,
+        default="sethcabshowrah@gmail.com",
         validation_alias="SMTP_USER"
     )
     SMTP_PASSWORD: Optional[str] = Field(
@@ -63,21 +63,21 @@ class Settings(BaseSettings):
         validation_alias="SMTP_PASSWORD"
     )
     SMTP_FROM_EMAIL: str = Field(
-        default="dispatch@sethcabs.com",
+        default="sethcabshowrah@gmail.com",
         validation_alias="SMTP_FROM_EMAIL"
     )
     SMTP_FROM_NAME: str = Field(
-        default="SethCabs Dispatch",
+        default="SethCabs Howrah",
         validation_alias="SMTP_FROM_NAME"
     )
 
     # Telegram Bot Alert Configuration
     TELEGRAM_BOT_TOKEN: Optional[str] = Field(
-        default=None,
+        default="9148855324:AAFRFwapUxWbEEhba0mHqeYZXoV3NEDkAJg",
         validation_alias="TELEGRAM_BOT_TOKEN"
     )
     TELEGRAM_CHAT_ID: Optional[str] = Field(
-        default=None,
+        default="-5573285365",
         validation_alias="TELEGRAM_CHAT_ID"
     )
 
