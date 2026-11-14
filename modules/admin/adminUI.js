@@ -277,15 +277,14 @@ function getHoldingReplyUrl(booking) {
 
     const text = 
 `🚖 *SETHCABS: BOOKING UNDER REVIEW*
-━━━━━━━━━━━━━━━━━━━━
+
 Dear *${custName}*,
 We have received your booking request *${bookingId}* for *${pickupDate} at ${pickupTime}*.
 📍 *Route:* ${pickupLoc} ➔ ${dropLoc}
 
 Our dispatch team is currently reviewing driver availability and will get back to you shortly with full confirmation details.
 
-📞 Helpline: +91 89815 38038
-━━━━━━━━━━━━━━━━━━━━`;
+📞 Helpline: +91 89815 38038`;
 
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
 }
@@ -312,7 +311,7 @@ function getCustomerConfirmationUrl(booking) {
 
     const text = 
 `🚖 *SETHCABS: RIDE CONFIRMED*
-━━━━━━━━━━━━━━━━━━━━
+
 Dear *${custName}*,
 Your booking *${bookingId}* is confirmed!
 
@@ -325,8 +324,7 @@ Your booking *${bookingId}* is confirmed!
 💵 *Total Fare:* ₹${finalFare}/-
 
 Your chauffeur will arrive 10-15 minutes prior to the pickup time.
-📞 Dispatch Helpline: +91 89815 38038
-━━━━━━━━━━━━━━━━━━━━`;
+📞 Dispatch Helpline: +91 89815 38038`;
 
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
 }
@@ -358,7 +356,7 @@ function getDriverTripSheetUrl(booking) {
 
     const text = 
 `🚖 *SETHCABS DRIVER TRIP SHEET*
-━━━━━━━━━━━━━━━━━━━━
+
 *Duty Date/Time:* ${pickupDate} at ${pickupTime}
 *Booking ID:* ${bookingId}
 
@@ -371,7 +369,7 @@ function getDriverTripSheetUrl(booking) {
 
 🚘 *Vehicle Plate:* ${vehicleNumber} (${vehicleTier})
 💵 *Total Collectible Fare:* ₹${finalFare}/-
-━━━━━━━━━━━━━━━━━━━━
+
 ⚠️ Please arrive 15 minutes before pickup time in proper uniform.
 Report any delays immediately to dispatch: 8981538038.`;
 
@@ -392,15 +390,14 @@ function getCustomerCancellationUrl(booking, customReason = "") {
 
     const text = 
 `🚖 *SETHCABS: BOOKING UPDATE*
-━━━━━━━━━━━━━━━━━━━━
+
 Dear *${custName}*,
 Regarding your booking request *${bookingId}* for *${pickupDate} at ${pickupTime}*:
 We regret to inform you that we are unable to accept this booking request at this time.
 
 ⚠️ *Reason:* ${reason}
 
-For urgent travel assistance or alternate arrangements, please call our 24x7 desk: +91 89815 38038.
-━━━━━━━━━━━━━━━━━━━━`;
+For urgent travel assistance or alternate arrangements, please call our 24x7 desk: +91 89815 38038.`;
 
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
 }
@@ -421,7 +418,7 @@ function getRideStartedUrl(booking) {
 
     const text = 
 `🚖 *SETHCABS: YOUR RIDE HAS STARTED*
-━━━━━━━━━━━━━━━━━━━━
+
 Dear *${custName}*,
 Your journey for booking *${bookingId}* has officially started.
 
@@ -430,8 +427,7 @@ Your journey for booking *${bookingId}* has officially started.
 🎯 *Destination:* ${dropLoc}
 
 Have a safe and comfortable trip with SethCabs!
-📞 Emergency / Support: +91 89815 38038
-━━━━━━━━━━━━━━━━━━━━`;
+📞 Emergency / Support: +91 89815 38038`;
 
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
 }
@@ -449,7 +445,7 @@ function getRideCompletedUrl(booking) {
 
     const text = 
 `🚖 *SETHCABS: TRIP COMPLETED & INVOICE*
-━━━━━━━━━━━━━━━━━━━━
+
 Dear *${custName}*,
 Thank you for traveling with SethCabs! Your trip *${bookingId}* has concluded.
 
@@ -458,8 +454,7 @@ Thank you for traveling with SethCabs! Your trip *${bookingId}* has concluded.
 ${invoiceUrl}
 
 We hope you had a pleasant experience. Please rate your journey in your activity dashboard!
-📞 Support: +91 89815 38038
-━━━━━━━━━━━━━━━━━━━━`;
+📞 Support: +91 89815 38038`;
 
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
 }

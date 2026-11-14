@@ -39,7 +39,7 @@ def send_telegram_booking_alert(booking: Dict[str, Any]) -> bool:
     # 1. Telegram Message Text
     msg_lines = [
         "🚖 *NEW BOOKING REQUEST RECEIVED*",
-        "━━━━━━━━━━━━━━━━━━━━",
+        "",
         f"📋 *ID:* `{booking_id}`",
         f"👤 *Customer:* {cust_name} ({cust_phone})",
         f"📅 *Schedule:* {pickup_date} at {pickup_time}",
@@ -47,21 +47,19 @@ def send_telegram_booking_alert(booking: Dict[str, Any]) -> bool:
         f"🎯 *Drop:* {drop_loc}",
         f"🚘 *Tier:* {veh_tier}",
         f"💵 *Estimated Fare:* ₹{est_fare}/-",
-        "━━━━━━━━━━━━━━━━━━━━",
+        "",
         "⚡ _Tap below to send an instant 1-Click WhatsApp holding reply to customer:_"
     ]
     telegram_text = "\n".join(msg_lines)
 
     # 2. WhatsApp Pre-filled Holding Reply Text
     holding_text = (
-        f"🚖 *SETHCABS: BOOKING UNDER REVIEW*\n"
-        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🚖 *SETHCABS: BOOKING UNDER REVIEW*\n\n"
         f"Dear *{cust_name}*,\n"
         f"We have received your booking request *{booking_id}* for *{pickup_date} at {pickup_time}*.\n"
         f"📍 *Route:* {pickup_loc} ➔ {drop_loc}\n\n"
         f"Our dispatch team is currently reviewing driver availability and will get back to you shortly with full confirmation details.\n\n"
-        f"📞 Helpline: {settings.DISPATCH_HELPLINE}\n"
-        f"━━━━━━━━━━━━━━━━━━━━"
+        f"📞 Helpline: {settings.DISPATCH_HELPLINE}"
     )
     encoded_holding_url = f"https://wa.me/{clean_phone}?text={urllib.parse.quote(holding_text)}"
     admin_dashboard_url = f"{settings.FRONTEND_BASE_URL}/modules/admin/admin.html"

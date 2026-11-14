@@ -363,7 +363,7 @@ function shareInvoiceOnWhatsApp(booking) {
     const currentUrl = window.location.href;
 
     const message = `🚖 *SETHCABS TAX & RIDE INVOICE*
-━━━━━━━━━━━━━━━━━━━━
+
 *Booking ID:* ${bookingId}
 *Passenger:* ${cust.name || "Guest"}
 *Pickup:* ${trip.pickup_location}
@@ -371,7 +371,7 @@ function shareInvoiceOnWhatsApp(booking) {
 *Date/Time:* ${trip.pickup_date} at ${trip.pickup_time}
 *Vehicle:* ${(fare.vehicle_tier || "").toUpperCase()}
 *Total Fare:* ₹${fare.estimated_fare}/- (Taxes Included)
-━━━━━━━━━━━━━━━━━━━━
+
 📄 *View / Download Official Invoice:*
 ${currentUrl}
 
